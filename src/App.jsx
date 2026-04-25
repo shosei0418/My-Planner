@@ -26,8 +26,8 @@ function fmtShort(k){ const[,m,d]=k.split("-"); return `${m}/${d}`; }
 function uid(){ return Math.random().toString(36).slice(2,9); }
 
 const STORAGE_KEY = "planner-v2";
-async function load(){ try{ const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):null; }catch{ return null; } }
-async function save(data){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch{} }
+async function load(){ try{ const r=await window.storage.get(STORAGE_KEY); return r?JSON.parse(r.value):null; }catch{ return null; } }
+async function save(data){ try{ await window.storage.set(STORAGE_KEY,JSON.stringify(data)); }catch{} }
 
 function emptyState(){
   return {
@@ -972,9 +972,9 @@ function Empty({text}){ return <div style={{textAlign:"center",color:"#ddd",font
 // ── Styles ─────────────────────────────────────────────────
 const BOX="0 1px 4px rgba(0,0,0,0.04)";
 const S={
-  page:{ background:"#f7f7f5", minHeight:"100vh", fontFamily:"'DM Sans','Helvetica Neue',Arial,sans-serif", maxWidth:480, margin:"0 auto" },
+  page:{ background:"#f7f7f5", minHeight:"100vh", fontFamily:"'DM Sans','Helvetica Neue',Arial,sans-serif", width:"100%", maxWidth:"100%", margin:"0" },
   content:{ paddingBottom:40 },
-  body:{ padding:"18px 14px 0" },
+  body:{ padding:"18px 20px 0" },
   arrow:{ background:"none", border:"1px solid #eee", borderRadius:8, width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"#888", cursor:"pointer", fontFamily:"inherit" },
   input:{ width:"100%", padding:"10px 12px", border:"1px solid #eee", borderRadius:10, fontSize:14, color:"#111", fontFamily:"inherit", outline:"none", background:"#fafafa", boxSizing:"border-box" },
   sectionLabel:{ fontSize:10, fontWeight:700, color:"#bbb", letterSpacing:1.5, textTransform:"uppercase", marginBottom:10 },
