@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MOOD_OPTIONS = ["😄","😊","😐","😔","😤"];
-const DEFAULT_HABITS = ["Gym","English","Wake up 6am"];
+const DEFAULT_HABITS = ["💪 Gym","📚 English","⏰ Wake up 6am"];
 const GOAL_COLORS = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8"];
 const EVENT_COLORS = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#222"];
 const PRIORITY_COLOR = { High:"#e53935", Med:"#FB8C00", Low:"#43A047" };
@@ -77,7 +77,9 @@ export default function App() {
       fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif",
       overflow:"hidden"
     }}>
-      <TopNav tab={tab} setTab={setTab} />
+      <div style={{ flexShrink:0, position:"sticky", top:0, zIndex:50, background:"#fff" }}>
+        <TopNav tab={tab} setTab={setTab} />
+      </div>
       <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", WebkitOverflowScrolling:"touch", background:"#fff" }}>
         {tab==="Home" && <HomeTab events={events} setEvents={setEvents} tasks={tasks} setTasks={setTasks} />}
         {tab==="Diary" && <DiaryTab diary={diary} setDiary={setDiary} habits={habits} setHabits={setHabits} />}
@@ -203,16 +205,16 @@ function CalendarSection({ events, setEvents }) {
                 lineHeight:1
               }}>{c.day}</span>
 
-              <div style={{ position:"absolute", top:26, left:2, right:2, display:"flex", flexDirection:"column", gap:2 }}>
-                {dayEvents.slice(0,2).map(e => (
+              <div style={{ position:"absolute", top:22, left:2, right:2, display:"flex", flexDirection:"column", gap:1 }}>
+                {dayEvents.slice(0,3).map(e => (
                   <div key={e.id} style={{
                     background: e.color||"#222", color:"#fff",
-                    fontSize:9, fontWeight:600, borderRadius:3,
-                    padding:"1px 3px", overflow:"hidden",
+                    fontSize:8, fontWeight:600, borderRadius:2,
+                    padding:"0px 3px", lineHeight:"14px", overflow:"hidden",
                     whiteSpace:"nowrap", textOverflow:"ellipsis"
                   }}>{e.title}</div>
                 ))}
-                {dayEvents.length>2 && <div style={{ fontSize:9, color:"#999", paddingLeft:2 }}>+{dayEvents.length-2}</div>}
+                {dayEvents.length>3 && <div style={{ fontSize:8, color:"#999", paddingLeft:2 }}>+{dayEvents.length-3}</div>}
               </div>
             </div>
           );
@@ -305,28 +307,23 @@ function TaskSection({ tasks, setTasks }) {
   const [newTask, setNewTask] = useState("");
   const [newMemo, setNewMemo] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
-  const [priority, setPriority] = useState("High");
   const [editId, setEditId] = useState(null);
   const [editText, setEditText] = useState("");
   const [editMemo, setEditMemo] = useState("");
   const [editDeadline, setEditDeadline] = useState("");
-  const [editPriority, setEditPriority] = useState("High");
 
-  // Touch drag state
   const dragIdx = useRef(null);
   const taskRefs = useRef([]);
 
-  const sorted = [...tasks].sort((a,b) => ({High:0,Med:1,Low:2}[a.priority]-{High:0,Med:1,Low:2}[b.priority]));
-
   const addTask = () => {
     if (!newTask.trim()) return;
-    setTasks(ts => [...ts, {id:Date.now(), title:newTask.trim(), priority, memo:newMemo.trim(), deadline:newDeadline}]);
+    setTasks(ts => [...ts, {id:Date.now(), title:newTask.trim(), memo:newMemo.trim(), deadline:newDeadline}]);
     setNewTask(""); setNewMemo(""); setNewDeadline(""); setAdding(false);
   };
 
   const check = id => setTasks(ts => ts.filter(t => t.id!==id));
-  const startEdit = t => { setEditId(t.id);setEditText(t.title);setEditPriority(t.priority);setEditMemo(t.memo||"");setEditDeadline(t.deadline||""); };
-  const saveEdit = () => { setTasks(ts=>ts.map(t=>t.id===editId?{...t,title:editText,priority:editPriority,memo:editMemo,deadline:editDeadline}:t)); setEditId(null); };
+  const startEdit = t => { setEditId(t.id); setEditText(t.title); setEditMemo(t.memo||""); setEditDeadline(t.deadline||""); };
+  const saveEdit = () => { setTasks(ts=>ts.map(t=>t.id===editId?{...t,title:editText,memo:editMemo,deadline:editDeadline}:t)); setEditId(null); };
 
   const handleTouchStart = (e, i) => { dragIdx.current = i; };
   const handleTouchEnd = (e) => {
@@ -338,47 +335,37 @@ function TaskSection({ tasks, setTasks }) {
       const toIdx = parseInt(target.dataset.taskidx);
       if (toIdx !== dragIdx.current) {
         const copy = [...tasks];
-        const fromSorted = sorted[dragIdx.current];
-        const toSorted = sorted[toIdx];
-        const fromI = copy.findIndex(t=>t.id===fromSorted.id);
-        const toI = copy.findIndex(t=>t.id===toSorted.id);
-        const [rem] = copy.splice(fromI,1);
-        copy.splice(toI,0,rem);
+        const [rem] = copy.splice(dragIdx.current, 1);
+        copy.splice(toIdx, 0, rem);
         setTasks(copy);
       }
     }
     dragIdx.current = null;
   };
 
-  const inputStyle = { width:"100%", fontSize:14, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit" };
+  const inStyle = { width:"100%", fontSize:16, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit" };
 
   return (
     <div style={{ padding:"0 16px 16px" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <span style={{ fontWeight:700, fontSize:15 }}>Tasks</span>
-        <button onClick={() => setAdding(true)} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 14px", fontSize:13, cursor:"pointer" }}>+ Add</button>
+        <button onClick={() => setAdding(a=>!a)} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 14px", fontSize:13, cursor:"pointer" }}>+ Add</button>
       </div>
 
       {adding && (
         <div style={{ marginBottom:12, padding:12, background:"#f8f8f8", borderRadius:14 }}>
           <input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Task title"
-            style={inputStyle} onKeyDown={e=>e.key==="Enter"&&addTask()}
+            style={inStyle} onKeyDown={e=>e.key==="Enter"&&addTask()} autoFocus
           />
-          <input value={newDeadline} onChange={e=>setNewDeadline(e.target.value)} type="date"
-            style={inputStyle}
-          />
-          <textarea value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Memo (optional)"
-            style={{ ...inputStyle, resize:"none", height:60 }}
-          />
-          <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-            {["High","Med","Low"].map(p => (
-              <button key={p} onClick={() => setPriority(p)} style={{
-                flex:1, padding:"6px", border:"none", borderRadius:8, cursor:"pointer",
-                background:priority===p?PRIORITY_COLOR[p]:"#e8e8e8",
-                color:priority===p?"#fff":"#666", fontSize:12, fontWeight:600
-              }}>{p}</button>
-            ))}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+            <span style={{ fontSize:12, color:"#aaa", whiteSpace:"nowrap" }}>📅 Due</span>
+            <input value={newDeadline} onChange={e=>setNewDeadline(e.target.value)} type="date"
+              style={{ flex:1, fontSize:14, padding:"6px 8px", border:"1px solid #e0e0e0", borderRadius:8, outline:"none" }}
+            />
           </div>
+          <input value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Memo (optional)"
+            style={{ ...inStyle, marginBottom:10 }}
+          />
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={()=>setAdding(false)} style={{ flex:1, padding:"9px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
             <button onClick={addTask} style={{ flex:1, padding:"9px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Add</button>
@@ -386,23 +373,19 @@ function TaskSection({ tasks, setTasks }) {
         </div>
       )}
 
-      {sorted.map((t, i) => (
+      {tasks.map((t, i) => (
         editId===t.id ? (
           <div key={t.id} style={{ marginBottom:8, padding:12, background:"#f8f8f8", borderRadius:12 }}>
-            <input value={editText} onChange={e=>setEditText(e.target.value)} style={inputStyle} />
-            <input value={editDeadline} onChange={e=>setEditDeadline(e.target.value)} type="date" style={inputStyle} />
-            <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Memo..."
-              style={{ ...inputStyle, resize:"none", height:56 }}
-            />
-            <div style={{ display:"flex", gap:6, marginBottom:8 }}>
-              {["High","Med","Low"].map(p => (
-                <button key={p} onClick={() => setEditPriority(p)} style={{
-                  flex:1, padding:"5px", border:"none", borderRadius:6, cursor:"pointer",
-                  background:editPriority===p?PRIORITY_COLOR[p]:"#e8e8e8",
-                  color:editPriority===p?"#fff":"#666", fontSize:11, fontWeight:600
-                }}>{p}</button>
-              ))}
+            <input value={editText} onChange={e=>setEditText(e.target.value)} style={inStyle} />
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <span style={{ fontSize:12, color:"#aaa", whiteSpace:"nowrap" }}>📅 Due</span>
+              <input value={editDeadline} onChange={e=>setEditDeadline(e.target.value)} type="date"
+                style={{ flex:1, fontSize:14, padding:"6px 8px", border:"1px solid #e0e0e0", borderRadius:8, outline:"none" }}
+              />
             </div>
+            <input value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Memo..."
+              style={{ ...inStyle, marginBottom:10 }}
+            />
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={() => setEditId(null)} style={{ flex:1, padding:"7px", background:"#e8e8e8", border:"none", borderRadius:8, cursor:"pointer", fontSize:12 }}>Cancel</button>
               <button onClick={saveEdit} style={{ flex:1, padding:"7px", background:"#000", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:600 }}>Save</button>
@@ -414,15 +397,14 @@ function TaskSection({ tasks, setTasks }) {
             ref={el => taskRefs.current[i]=el}
             onTouchStart={e=>handleTouchStart(e,i)}
             onTouchEnd={handleTouchEnd}
-            style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8, padding:"11px 12px", background:"#f8f8f8", borderRadius:12, cursor:"grab", userSelect:"none" }}
+            style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8, padding:"11px 12px", background:"#f8f8f8", borderRadius:12, userSelect:"none" }}
           >
-            <button onClick={() => check(t.id)} style={{ width:20, height:20, borderRadius:"50%", border:`2px solid ${PRIORITY_COLOR[t.priority]}`, background:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
+            <button onClick={() => check(t.id)} style={{ width:20, height:20, borderRadius:"50%", border:"2px solid #ccc", background:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:14, fontWeight:500 }}>{t.title}</div>
               {t.deadline && <div style={{ fontSize:11, color:"#999", marginTop:2 }}>📅 {t.deadline}</div>}
               {t.memo && <div style={{ fontSize:12, color:"#aaa", marginTop:2 }}>{t.memo}</div>}
             </div>
-            <span style={{ fontSize:10, color:PRIORITY_COLOR[t.priority], fontWeight:700, flexShrink:0, marginTop:3 }}>{t.priority}</span>
             <button onClick={() => startEdit(t)} style={{ background:"none", border:"none", cursor:"pointer", color:"#bbb", fontSize:14, padding:4 }}>✎</button>
           </div>
         )
@@ -591,7 +573,7 @@ function DiaryWrite({ diary, setDiary, habits, setHabits, date: dateProp, onBack
           {addingHabit ? (
             <div style={{ display:"flex", gap:4 }}>
               <input value={newHabit} onChange={e=>setNewHabit(e.target.value)} placeholder="Habit name"
-                style={{ fontSize:13, padding:"5px 10px", border:"1px solid #e0e0e0", borderRadius:20, outline:"none", width:110 }}
+                style={{ fontSize:16, padding:"5px 10px", border:"1px solid #e0e0e0", borderRadius:20, outline:"none", width:110 }}
                 onKeyDown={e=>e.key==="Enter"&&addHabit()} autoFocus
               />
               <button onClick={addHabit} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontSize:12 }}>+</button>
@@ -606,7 +588,7 @@ function DiaryWrite({ diary, setDiary, habits, setHabits, date: dateProp, onBack
       <div style={{ marginBottom:18 }}>
         <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>TODAY</div>
         <textarea value={text} onChange={e=>update({text:e.target.value})} placeholder="Write about your day..."
-          style={{ width:"100%", minHeight:130, fontSize:15, padding:"12px", border:"1.5px solid #ebebeb", borderRadius:14, resize:"none", outline:"none", boxSizing:"border-box", lineHeight:1.6, fontFamily:"inherit" }}
+          style={{ width:"100%", minHeight:130, fontSize:16, padding:"12px", border:"1.5px solid #ebebeb", borderRadius:14, resize:"none", outline:"none", boxSizing:"border-box", lineHeight:1.6, fontFamily:"inherit" }}
         />
       </div>
 
@@ -689,6 +671,7 @@ function BeRealCard({ date, entry, onClick }) {
 function DiaryDetailModal({ date, diary, setDiary, onClose, onEdit }) {
   const entry = diary[date] || {};
   const fmted = new Date(date+"T00:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const [lightbox, setLightbox] = useState(null);
 
   const del = () => {
     if (window.confirm("Delete this entry?")) {
@@ -720,10 +703,21 @@ function DiaryDetailModal({ date, diary, setDiary, onClose, onEdit }) {
         {entry.text && <p style={{ fontSize:15, lineHeight:1.7, color:"#333", marginBottom:16, whiteSpace:"pre-wrap" }}>{entry.text}</p>}
         {entry.photos?.length > 0 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6 }}>
-            {entry.photos.map((p,i) => <img key={i} src={p} alt="" style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:10 }} />)}
+            {entry.photos.map((p,i) => (
+              <img key={i} src={p} alt="" onClick={e=>{e.stopPropagation();setLightbox(p);}}
+                style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:10, cursor:"pointer" }} />
+            ))}
           </div>
         )}
       </div>
+
+      {lightbox && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={()=>setLightbox(null)}>
+          <img src={lightbox} alt="" style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }} />
+          <button onClick={()=>setLightbox(null)} style={{ position:"absolute", top:20, right:20, background:"none", border:"none", color:"#fff", fontSize:32, cursor:"pointer" }}>×</button>
+        </div>
+      )}
     </div>
   );
 }
