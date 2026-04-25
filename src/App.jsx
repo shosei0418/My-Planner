@@ -558,6 +558,8 @@ function DiaryWrite({ diary, setDiary, habits, setHabits, date: dateProp, onBack
   }
 
   const fmtedDate = !isToday ? new Date(date+"T00:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"}) : null;
+
+  return (
     <div style={{ padding:"16px 16px 80px" }}>
       {/* Mood */}
       <div style={{ marginBottom:18 }}>
@@ -754,12 +756,6 @@ function GoalsTab({ goals, setGoals }) {
 
   return (
     <div style={{ padding:"16px 16px 80px" }}>
-      {!isToday && (
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-          <button onClick={onBackToToday} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#888" }}>‹</button>
-          <span style={{ fontSize:13, fontWeight:600, color:"#888" }}>{fmtedDate}</span>
-        </div>
-      )}
       <div style={{ display:"flex", gap:6, marginBottom:16 }}>
         {["Month","Year","🏆"].map(p => (
           <button key={p} onClick={() => setPeriod(p)} style={{
