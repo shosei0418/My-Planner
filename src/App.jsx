@@ -1,442 +1,724 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
-// ── Constants ──────────────────────────────────────────────
-const MONTHS = ["January","February","March","April","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const MONTHS_S = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// ── Constants ──────────────────────────────────────────────────────────────
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const DAYS_S = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const EVENT_COLORS = ["#5B6EF5","#FF6B6B","#51C87A","#F5A623","#9B59B6","#1ABC9C","#E67E22"];
-const TASK_CATS = [
-  { id:"work",     label:"Work",     color:"#5B6EF5", bg:"#F0F1FF" },
-  { id:"personal", label:"Personal", color:"#51C87A", bg:"#F0FFF5" },
-  { id:"health",   label:"Health",   color:"#FF6B6B", bg:"#FFF0F0" },
-  { id:"study",    label:"Study",    color:"#F5A623", bg:"#FFF8EE" },
-  { id:"other",    label:"Other",    color:"#888",    bg:"#F5F5F5" },
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MOOD_OPTIONS = ["😄","😊","😐","😔","😤"];
+const DEFAULT_HABITS = ["Gym","English","Wake up 6am"];
+const GOAL_COLORS = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8"];
+const EVENT_COLORS = ["#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#222"];
+const PRIORITY_COLOR = { High:"#e53935", Med:"#FB8C00", Low:"#43A047" };
+const GRADIENTS = [
+  "linear-gradient(135deg,#667eea,#764ba2)",
+  "linear-gradient(135deg,#f093fb,#f5576c)",
+  "linear-gradient(135deg,#4facfe,#00f2fe)",
+  "linear-gradient(135deg,#43e97b,#38f9d7)",
+  "linear-gradient(135deg,#fa709a,#fee140)",
+  "linear-gradient(135deg,#a18cd1,#fbc2eb)",
 ];
-const CAT_MAP = Object.fromEntries(TASK_CATS.map(c=>[c.id,c]));
-const GOAL_PERIODS = ["week","month","year"];
-const MOODS = [{e:"😄",l:"Great"},{e:"🙂",l:"Good"},{e:"😐",l:"OK"},{e:"😔",l:"Low"},{e:"😤",l:"Rough"}];
 
-// ── Helpers ────────────────────────────────────────────────
-function toKey(d){ return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`; }
-function todayKey(){ return toKey(new Date()); }
-function p2(n){ return String(n).padStart(2,"0"); }
-function parseKey(k){ const[y,m,d]=k.split("-").map(Number); return new Date(y,m-1,d); }
-function fmtShort(k){ const[,m,d]=k.split("-"); return `${m}/${d}`; }
-function uid(){ return Math.random().toString(36).slice(2,9); }
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-const STORAGE_KEY = "planner-v2";
-async function load(){ try{ const r=await window.storage.get(STORAGE_KEY); return r?JSON.parse(r.value):null; }catch{ return null; } }
-async function save(data){ try{ await window.storage.set(STORAGE_KEY,JSON.stringify(data)); }catch{} }
-
-function emptyState(){
-  return {
-    events: [],  // {id,title,date,time,endTime,color,note}
-    tasks:  [],  // {id,title,done,cat,priority,dueDate,note}
-    goals:  [],  // {id,title,period,current,target,unit,color}
-    journal:{},  // dateKey:{text,photos,mood}
-  };
+function getWAHolidays(year) {
+  const a=year%19,b=Math.floor(year/100),c=year%100,d2=Math.floor(b/4),e=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d2-g+15)%30;
+  const ii=Math.floor(c/4),k=c%4,l=(32+2*e+2*ii-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const mo=Math.floor((h+l-7*m+114)/31),dy=((h+l-7*m+114)%31)+1;
+  const es=new Date(year,mo-1,dy);
+  const add=(dt,n)=>{const r=new Date(dt);r.setDate(r.getDate()+n);return r;};
+  const fmt=dt=>dt.toISOString().slice(0,10);
+  const nth=(y,mo2,wd,n)=>{const dt=new Date(y,mo2-1,1);let cnt=0;while(true){if(dt.getDay()===wd)cnt++;if(cnt===n)return fmt(dt);dt.setDate(dt.getDate()+1);}};
+  const last=(y,mo2,wd)=>{const dt=new Date(y,mo2,0);while(dt.getDay()!==wd)dt.setDate(dt.getDate()-1);return fmt(dt);};
+  const set=new Set([
+    fmt(add(es,-2)),fmt(add(es,-1)),fmt(es),fmt(add(es,1)),
+    `${year}-04-25`,
+    nth(year,6,1,1),
+    last(year,9,1),
+  ]);
+  // New Year's
+  const ny=new Date(year,0,1);
+  if(ny.getDay()===0)set.add(`${year}-01-02`);
+  else if(ny.getDay()===6)set.add(`${year}-01-03`);
+  else set.add(`${year}-01-01`);
+  // Australia Day
+  const ad=new Date(year,0,26);
+  if(ad.getDay()===0)set.add(`${year}-01-27`);
+  else if(ad.getDay()===6)set.add(`${year}-01-28`);
+  else set.add(`${year}-01-26`);
+  // Christmas/Boxing
+  const xm=new Date(year,11,25);
+  if(xm.getDay()===0){set.add(`${year}-12-27`);set.add(`${year}-12-26`);}
+  else if(xm.getDay()===6){set.add(`${year}-12-27`);set.add(`${year}-12-28`);}
+  else{set.add(`${year}-12-25`);set.add(`${year}-12-26`);}
+  return set;
 }
 
-// ── App ────────────────────────────────────────────────────
-export default function App(){
-  const[data,setData]=useState(emptyState());
-  const[loaded,setLoaded]=useState(false);
-  const[tab,setTab]=useState("home");
+// ── App ────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [tab, setTab] = useState("Home");
+  const [events, setEvents] = useState(() => load("pl_events", []));
+  const [tasks, setTasks] = useState(() => load("pl_tasks", []));
+  const [diary, setDiary] = useState(() => load("pl_diary", {}));
+  const [goals, setGoals] = useState(() => load("pl_goals", []));
+  const [habits, setHabits] = useState(() => load("pl_habits", DEFAULT_HABITS));
 
-  useEffect(()=>{ load().then(d=>{ if(d) setData(d); setLoaded(true); }); },[]);
-  useEffect(()=>{ if(loaded) save(data); },[data,loaded]);
+  useEffect(() => save("pl_events", events), [events]);
+  useEffect(() => save("pl_tasks", tasks), [tasks]);
+  useEffect(() => save("pl_diary", diary), [diary]);
+  useEffect(() => save("pl_goals", goals), [goals]);
+  useEffect(() => save("pl_habits", habits), [habits]);
 
-  function upd(patch){ setData(p=>({...p,...patch})); }
-  const addEvent  = ev  => upd({events:[...data.events,{id:uid(),...ev}]});
-  const editEvent = (id,p) => upd({events:data.events.map(e=>e.id===id?{...e,...p}:e)});
-  const delEvent  = id  => upd({events:data.events.filter(e=>e.id!==id)});
-  const addTask   = t   => upd({tasks:[...data.tasks,{id:uid(),done:false,...t}]});
-  const editTask  = (id,p) => upd({tasks:data.tasks.map(t=>t.id===id?{...t,...p}:t)});
-  const delTask   = id  => upd({tasks:data.tasks.filter(t=>t.id!==id)});
-  const reorderTasks = (fromId, toId) => {
-    const arr=[...data.tasks];
-    const fi=arr.findIndex(t=>t.id===fromId);
-    const ti=arr.findIndex(t=>t.id===toId);
-    if(fi<0||ti<0||fi===ti) return;
-    const [moved]=arr.splice(fi,1);
-    arr.splice(ti,0,moved);
-    upd({tasks:arr});
-  };
-  const addGoal   = g   => upd({goals:[...data.goals,{id:uid(),current:0,...g}]});
-  const editGoal  = (id,p) => upd({goals:data.goals.map(g=>g.id===id?{...g,...p}:g)});
-  const delGoal   = id  => upd({goals:data.goals.filter(g=>g.id!==id)});
-  const updJournal= (key,p) => upd({journal:{...data.journal,[key]:{...(data.journal[key]||{}),...p}}});
-
-  if(!loaded) return <div style={{...S.page,display:"flex",alignItems:"center",justifyContent:"center",color:"#ccc",fontSize:13}}>Loading...</div>;
-
-  const props={data,addEvent,editEvent,delEvent,addTask,editTask,delTask,reorderTasks,addGoal,editGoal,delGoal,updJournal};
-
-  return(
-    <div style={S.page}>
-      <TopNav tab={tab} setTab={setTab}/>
-      <div style={S.content}>
-        {tab==="home"    && <Home    {...props}/>}
-        {tab==="journal" && <Journal {...props}/>}
-        {tab==="goals"   && <Goals   {...props}/>}
+  return (
+    <div style={{
+      position:"fixed", inset:0, background:"#fff",
+      display:"flex", flexDirection:"column",
+      fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif",
+      overflow:"hidden"
+    }}>
+      <TopNav tab={tab} setTab={setTab} />
+      <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", WebkitOverflowScrolling:"touch", background:"#fff" }}>
+        {tab==="Home" && <HomeTab events={events} setEvents={setEvents} tasks={tasks} setTasks={setTasks} />}
+        {tab==="Diary" && <DiaryTab diary={diary} setDiary={setDiary} habits={habits} setHabits={setHabits} />}
+        {tab==="Goals" && <GoalsTab goals={goals} setGoals={setGoals} />}
+        <div style={{height:32}} />
       </div>
     </div>
   );
 }
 
-// ── Top Nav ────────────────────────────────────────────────
-function TopNav({tab,setTab}){
-  const tabs=[
-    {id:"home",    label:"Home"},
-    {id:"journal", label:"Diary"},
-    {id:"goals",   label:"Goals"},
-  ];
-  return(
-    <div style={{background:"#fff",borderBottom:"1px solid #efefef",padding:"16px 20px 0",position:"sticky",top:0,zIndex:50}}>
-      <div style={{display:"flex",gap:0}}>
-        {tabs.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1, padding:"10px 0", background:"none", border:"none",
-            borderBottom: tab===t.id ? "2px solid #111":"2px solid transparent",
-            color: tab===t.id ? "#111":"#bbb",
-            fontSize:14, fontWeight: tab===t.id ? 700:400,
-            cursor:"pointer", fontFamily:"inherit", letterSpacing:-0.2
-          }}>{t.label}</button>
+// ── Top Nav ────────────────────────────────────────────────────────────────
+function TopNav({ tab, setTab }) {
+  return (
+    <div style={{ padding:"14px 16px 10px", background:"#fff", borderBottom:"1px solid #f0f0f0", flexShrink:0 }}>
+      <div style={{ display:"flex", gap:6, background:"#f2f2f2", borderRadius:100, padding:4 }}>
+        {["Home","Diary","Goals"].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            flex:1, padding:"8px 0", borderRadius:100, border:"none", cursor:"pointer",
+            background: tab===t ? "#000" : "transparent",
+            color: tab===t ? "#fff" : "#888",
+            fontSize:14, fontWeight: tab===t ? 600 : 400,
+            transition:"all 0.2s"
+          }}>{t}</button>
         ))}
       </div>
     </div>
   );
 }
 
-// ── Australian (WA) Public Holidays ───────────────────────
-function easterSunday(y){
-  const a=y%19,b=Math.floor(y/100),c=y%100;
-  const d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
-  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30;
-  const i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7;
-  const m=Math.floor((a+11*h+22*l)/451);
-  const month=Math.floor((h+l-7*m+114)/31);
-  const day=((h+l-7*m+114)%31)+1;
-  return new Date(y,month-1,day);
-}
-function waHolidays(y){
-  const shift=(d,n)=>{ const r=new Date(d); r.setDate(r.getDate()+n); return r; };
-  const fmt=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
-  // If falls on Sat → sub Mon (+2), if Sun → sub Mon (+1)
-  const obs=d=>{ const dw=d.getDay(); return dw===6?shift(d,2):dw===0?shift(d,1):d; };
-  const add=(...dates)=>dates.forEach(d=>{ set.add(fmt(d)); const o=obs(d); if(fmt(o)!==fmt(d)) set.add(fmt(o)); });
-
-  const easter=easterSunday(y);
-
-  // First Monday in June (WA Day)
-  const jun1=new Date(y,5,1);
-  const dow1=jun1.getDay();
-  const waDay=shift(jun1, dow1===1?0:(8-dow1)%7);
-
-  // Queen's/King's Birthday - last Monday in September (WA)
-  const sep30=new Date(y,8,30);
-  const kbDay=shift(sep30,-(sep30.getDay()===0?6:sep30.getDay()-1));
-
-  const set=new Set();
-  add(
-    new Date(y,0,1),    // New Year's Day
-    new Date(y,0,26),   // Australia Day
-    shift(easter,-2),   // Good Friday
-    shift(easter,-1),   // Easter Saturday
-    easter,             // Easter Sunday
-    shift(easter,1),    // Easter Monday
-    new Date(y,3,25),   // Anzac Day
-    waDay,              // WA Day (first Mon in June)
-    kbDay,              // King's Birthday (last Mon in Sep, WA)
-    new Date(y,11,25),  // Christmas Day
-    new Date(y,11,26),  // Boxing Day
+// ── Home ───────────────────────────────────────────────────────────────────
+function HomeTab({ events, setEvents, tasks, setTasks }) {
+  return (
+    <div>
+      <CalendarSection events={events} setEvents={setEvents} />
+      <div style={{ height:1, background:"#f0f0f0", margin:"16px 0" }} />
+      <TaskSection tasks={tasks} setTasks={setTasks} />
+    </div>
   );
-
-  // Christmas/Boxing Day clash fix
-  // If Dec 25 is Fri → Dec 26 (Sat) observed Mon Dec 28
-  // If Dec 25 is Sat → obs Mon Dec 27, Dec 26 Sun obs Tue Dec 28
-  // If Dec 25 is Sun → obs Mon Dec 26, Boxing Day (Dec 26 Mon) obs Tue Dec 27
-  const xmas=new Date(y,11,25);
-  const xdow=xmas.getDay();
-  if(xdow===5){ set.add(`${y}-12-28`); } // Boxing Day substitute
-  if(xdow===6){ set.add(`${y}-12-27`); set.add(`${y}-12-28`); }
-  if(xdow===0){ set.add(`${y}-12-26`); set.add(`${y}-12-27`); }
-
-  return set;
 }
 
+// ── Calendar ───────────────────────────────────────────────────────────────
+function CalendarSection({ events, setEvents }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const holidays = getWAHolidays(year);
 
-const PRIORITY_ORDER = {high:0, med:1, low:2};
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+  const prevM = month===0 ? {y:year-1,m:11} : {y:year,m:month-1};
+  const nextM = month===11 ? {y:year+1,m:0} : {y:year,m:month+1};
+  const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
 
-function Home({data,addEvent,editEvent,delEvent,addTask,editTask,delTask,reorderTasks}){
-  const today = todayKey();
-  const now   = new Date();
-  const[calYear,setCalYear]=useState(now.getFullYear());
-  const[calMonth,setCalMonth]=useState(now.getMonth());
-  const[dayModal,setDayModal]=useState(null);
-  const[eventModal,setEventModal]=useState(null);
-  const[taskModal,setTaskModal]=useState(null);
-  const[headerText,setHeaderText]=useState("My Planner");
-  const[editingHeader,setEditingHeader]=useState(false);
-  function shiftMonth(delta){
-    let m=calMonth+delta,y=calYear;
-    if(m<0){m=11;y--;} if(m>11){m=0;y++;}
-    setCalMonth(m); setCalYear(y);
+  const cells = [];
+  for (let i = 0; i < totalCells; i++) {
+    const offset = i - firstDay;
+    if (offset < 0) cells.push({ day: prevDays+offset+1, month: prevM.m, year: prevM.y, current: false });
+    else if (offset >= daysInMonth) cells.push({ day: offset-daysInMonth+1, month: nextM.m, year: nextM.y, current: false });
+    else cells.push({ day: offset+1, month, year, current: true });
   }
 
-  // Build calendar cells with prev/next month fill
-  const firstDay=new Date(calYear,calMonth,1).getDay();
-  const dim=new Date(calYear,calMonth+1,0).getDate();
-  const prevDim=new Date(calYear,calMonth,0).getDate();
-  const allCells=[];
-  // prev month fill
-  for(let i=0;i<firstDay;i++){
-    const d=prevDim-firstDay+1+i;
-    const m=calMonth-1<0?11:calMonth-1;
-    const y=calMonth-1<0?calYear-1:calYear;
-    allCells.push({d,m,y,faded:true});
-  }
-  // current month
-  for(let d=1;d<=dim;d++) allCells.push({d,m:calMonth,y:calYear,faded:false});
-  // next month fill to complete row
-  const rem=(7-allCells.length%7)%7;
-  for(let d=1;d<=rem;d++){
-    const m=calMonth+1>11?0:calMonth+1;
-    const y=calMonth+1>11?calYear+1:calYear;
-    allCells.push({d,m,y,faded:true});
-  }
+  const getDateStr = c => `${c.year}-${String(c.month+1).padStart(2,"0")}-${String(c.day).padStart(2,"0")}`;
+  const getEvents = ds => events.filter(e => e.date===ds);
+  const tod = todayStr();
 
-  const holidays=waHolidays(calYear);
+  const handleCellClick = c => {
+    const ds = getDateStr(c);
+    if (!c.current) { setYear(c.year); setMonth(c.month); }
+    setSelectedDate(ds);
+  };
 
-  // Tasks: pending in array order, done at bottom
-  // drag state
-  const[dragId,setDragId]=useState(null);
-  const[overCol,setOverCol]=useState(null); // 'now'|'later'
-  const[overId,setOverId]=useState(null);
-  const longPressTimer=useRef(null);
-  const isDragging=useRef(false);
+  const prevMonth = () => { if(month===0){setYear(y=>y-1);setMonth(11);}else setMonth(m=>m-1); };
+  const nextMonth = () => { if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1); };
 
-  function onTaskPointerDown(e,id){
-    isDragging.current=false;
-    longPressTimer.current=setTimeout(()=>{
-      isDragging.current=true;
-      setDragId(id);
-      if(navigator.vibrate) navigator.vibrate(40);
-    },350);
-  }
-  function onTaskPointerUp(id, targetCol){
-    clearTimeout(longPressTimer.current);
-    if(isDragging.current&&dragId){
-      if(overId&&dragId!==overId){
-        reorderTasks(dragId,overId);
-      } else if(targetCol&&dragId!==id){
-        // moved to other column → change priority
-        const isNow=targetCol==="now";
-        editTask(dragId,{priority:isNow?"high":"med"});
-      }
-    }
-    isDragging.current=false;
-    setDragId(null); setOverId(null); setOverCol(null);
-  }
-  function onTaskPointerEnter(id){ if(isDragging.current) setOverId(id); }
-
-  const nowTasks=data.tasks.filter(t=>!t.done&&t.priority==="high");
-  const laterTasks=data.tasks.filter(t=>!t.done&&t.priority!=="high");
-  const pendingTasks=[...nowTasks,...laterTasks];
-  const doneTasks=data.tasks.filter(t=>t.done);
-
-  const dayEvents = dayModal ? data.events.filter(e=>e.date===dayModal).sort((a,b)=>a.time?.localeCompare(b.time||"")||0) : [];
-
-  return(
-    <div style={S.body}>
-
-      {/* Editable header */}
-      <div style={{marginBottom:18}}>
-        {editingHeader
-          ? <input value={headerText} onChange={e=>setHeaderText(e.target.value)}
-              onBlur={()=>setEditingHeader(false)}
-              onKeyDown={e=>e.key==="Enter"&&setEditingHeader(false)}
-              autoFocus
-              style={{fontSize:24,fontWeight:800,color:"#111",letterSpacing:-0.8,border:"none",borderBottom:"2px solid #111",outline:"none",background:"none",fontFamily:"inherit",width:"100%",padding:"2px 0"}}/>
-          : <div onClick={()=>setEditingHeader(true)} style={{fontSize:24,fontWeight:800,color:"#111",letterSpacing:-0.8,cursor:"text"}}>{headerText} <span style={{fontSize:14,color:"#ddd",fontWeight:400}}>✎</span></div>
-        }
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 16px 10px" }}>
+        <button onClick={prevMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:"#333" }}>‹</button>
+        <span style={{ fontWeight:700, fontSize:17 }}>{MONTHS[month]} {year}</span>
+        <button onClick={nextMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:"#333" }}>›</button>
       </div>
 
-      {/* ── Calendar ── */}
-      <div style={{background:"#fff",border:"1px solid #efefef",borderRadius:18,marginBottom:14,boxShadow:BOX,overflow:"hidden"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px 10px"}}>
-          <button onClick={()=>shiftMonth(-1)} style={S.arrow}>‹</button>
-          <span style={{fontSize:14,fontWeight:700,color:"#111"}}>{MONTHS[calMonth]} {calYear}</span>
-          <button onClick={()=>shiftMonth(1)} style={S.arrow}>›</button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderTop:"1px solid #f0f0f0",borderBottom:"1px solid #f0f0f0"}}>
-          {DAYS_S.map((d,i)=>(
-            <div key={i} style={{textAlign:"center",fontSize:9,color:i===0?"#E03A3A":i===6?"#3A6FE0":"#bbb",padding:"5px 0",borderRight:i<6?"1px solid #f0f0f0":"none",fontWeight:i===0||i===6?600:400,letterSpacing:-0.3}}>{d}</div>
-          ))}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
-          {allCells.map(({d,m,y,faded},i)=>{
-            const key=`${y}-${p2(m+1)}-${p2(d)}`;
-            const evs=data.events.filter(e=>e.date===key);
-            const isToday=key===today;
-            const col=(i+1)%7;
-            const dow=new Date(y,m,d).getDay();
-            const isHoliday=!faded&&holidays.has(key);
-            const numColor=faded?"#ccc":isToday?"#fff":isHoliday||dow===0?"#E03A3A":dow===6?"#3A6FE0":"#555";
-            return(
-              <button key={`${key}-${faded}`} onClick={()=>{
-                if(faded){ // navigate to that month
-                  setCalMonth(m); setCalYear(y);
-                } else {
-                  setDayModal(key);
-                }
-              }} style={{
-                minHeight:68, border:"none", cursor:"pointer", padding:"4px 5px",
-                borderRight:col!==0?"1px solid #f0f0f0":"none",
-                borderBottom:"1px solid #f0f0f0",
-                background:isToday?"#fafafa":"#fff",
-                display:"flex",flexDirection:"column",alignItems:"flex-end", gap:2
-              }}>
-                <span style={{
-                  fontSize:11, fontWeight:isToday?800:400, lineHeight:1,
-                  background:isToday?"#111":"none",
-                  color:numColor,
-                  width:isToday?17:undefined, height:isToday?17:undefined,
-                  borderRadius:isToday?"50%":undefined,
-                  display:"flex",alignItems:"center",justifyContent:"center"
-                }}>{d}</span>
-                {!faded&&(
-                  <div style={{width:"100%",display:"flex",flexDirection:"column",gap:2}}>
-                    {evs.slice(0,2).map(ev=>(
-                      <div key={ev.id} style={{fontSize:9,fontWeight:600,color:"#fff",background:ev.color||EVENT_COLORS[0],borderRadius:3,padding:"1px 4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"left"}}>{ev.title}</div>
-                    ))}
-                    {evs.length>2&&<div style={{fontSize:9,color:"#bbb",textAlign:"left",paddingLeft:2}}>+{evs.length-2}</div>}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Day labels */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:"#f8f8f8", borderTop:"1px solid #eee", borderBottom:"1px solid #eee" }}>
+        {DAYS.map((d, i) => (
+          <div key={d} style={{
+            padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:600,
+            color: i===0?"#e53935":i===6?"#1565C0":"#888"
+          }}>{d}</div>
+        ))}
       </div>
 
-      {/* ── Tasks ── */}
-      <div style={{background:"#fff",border:"1px solid #efefef",borderRadius:18,padding:"14px 16px",marginBottom:14,boxShadow:BOX}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <span style={{fontSize:13,fontWeight:700,color:"#111"}}>Tasks{pendingTasks.length>0?` · ${pendingTasks.length}`:""}</span>
-          <IconBtn onClick={()=>setTaskModal("add")}>＋</IconBtn>
-        </div>
+      {/* Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, background:"#eee" }}>
+        {cells.map((c, i) => {
+          const ds = getDateStr(c);
+          const dow = new Date(ds+"T00:00:00").getDay();
+          const isRed = dow===0 || holidays.has(ds);
+          const isBlue = dow===6;
+          const isToday = ds===tod;
+          const isSel = ds===selectedDate;
+          const dayEvents = getEvents(ds);
+          const numColor = isRed?"#e53935":isBlue?"#1565C0":"#222";
 
-        {data.tasks.length===0
-          ? <Empty text="No tasks yet — tap ＋ to add"/>
-          : <>
-            {/* Two-column split */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom: doneTasks.length>0?12:0}}>
-              {/* Now */}
-              <div
-                onPointerEnter={()=>{ if(isDragging.current) setOverCol("now"); }}
-                onPointerUp={()=>onTaskPointerUp(null,"now")}
-                style={{background: overCol==="now"&&dragId?"#f0f7ff":"#f9f9f9",borderRadius:12,padding:"10px 10px 6px",transition:"background 0.15s",minHeight:60}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#111",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>⚡ Now</div>
-                {nowTasks.length===0
-                  ? <div style={{fontSize:11,color:"#ddd",padding:"8px 0"}}>—</div>
-                  : nowTasks.map(t=>(
-                    <div key={t.id}
-                      onPointerDown={e=>onTaskPointerDown(e,t.id)}
-                      onPointerEnter={()=>onTaskPointerEnter(t.id)}
-                      onPointerUp={()=>onTaskPointerUp(t.id,"now")}
-                      style={{opacity:dragId===t.id?0.35:1,background:overId===t.id&&dragId&&dragId!==t.id?"#e8f0ff":"transparent",borderRadius:6,transition:"all 0.1s",touchAction:"none",userSelect:"none"}}>
-                      <MiniTaskRow task={t} onToggle={()=>delTask(t.id)} onTap={()=>{ if(!isDragging.current) setTaskModal(t); }}/>
-                    </div>
-                  ))
-                }
-              </div>
-              {/* Later */}
-              <div
-                onPointerEnter={()=>{ if(isDragging.current) setOverCol("later"); }}
-                onPointerUp={()=>onTaskPointerUp(null,"later")}
-                style={{background: overCol==="later"&&dragId?"#fff8f0":"#f9f9f9",borderRadius:12,padding:"10px 10px 6px",transition:"background 0.15s",minHeight:60}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#888",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Later</div>
-                {laterTasks.length===0
-                  ? <div style={{fontSize:11,color:"#ddd",padding:"8px 0"}}>—</div>
-                  : laterTasks.map(t=>(
-                    <div key={t.id}
-                      onPointerDown={e=>onTaskPointerDown(e,t.id)}
-                      onPointerEnter={()=>onTaskPointerEnter(t.id)}
-                      onPointerUp={()=>onTaskPointerUp(t.id,"later")}
-                      style={{opacity:dragId===t.id?0.35:1,background:overId===t.id&&dragId&&dragId!==t.id?"#fff4e0":"transparent",borderRadius:6,transition:"all 0.1s",touchAction:"none",userSelect:"none"}}>
-                      <MiniTaskRow task={t} onToggle={()=>delTask(t.id)} onTap={()=>{ if(!isDragging.current) setTaskModal(t); }}/>
-                    </div>
-                  ))
-                }
+          return (
+            <div key={i} onClick={() => handleCellClick(c)} style={{
+              background: isSel?"#f5f5f5":"#fff",
+              height:68, overflow:"hidden", cursor:"pointer",
+              position:"relative", opacity: c.current?1:0.3,
+              boxSizing:"border-box"
+            }}>
+              <span style={{
+                position:"absolute", top:4, right:5, fontSize:12,
+                fontWeight: isToday?700:400,
+                color: isToday?"#fff":numColor,
+                background: isToday?"#000":"transparent",
+                borderRadius:"50%", width:isToday?20:undefined,
+                height:isToday?20:undefined,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                lineHeight:1
+              }}>{c.day}</span>
+
+              <div style={{ position:"absolute", top:26, left:2, right:2, display:"flex", flexDirection:"column", gap:2 }}>
+                {dayEvents.slice(0,2).map(e => (
+                  <div key={e.id} style={{
+                    background: e.color||"#222", color:"#fff",
+                    fontSize:9, fontWeight:600, borderRadius:3,
+                    padding:"1px 3px", overflow:"hidden",
+                    whiteSpace:"nowrap", textOverflow:"ellipsis"
+                  }}>{e.title}</div>
+                ))}
+                {dayEvents.length>2 && <div style={{ fontSize:9, color:"#999", paddingLeft:2 }}>+{dayEvents.length-2}</div>}
               </div>
             </div>
-          </>
-        }
+          );
+        })}
       </div>
 
-      {/* Day modal */}
-      {dayModal&&(
-        <Modal onClose={()=>setDayModal(null)} title={`${fmtShort(dayModal)}${dayModal===today?" · Today":""}`}>
-          {dayEvents.length===0
-            ? <div style={{color:"#ccc",fontSize:13,textAlign:"center",padding:"12px 0 16px"}}>No events</div>
-            : dayEvents.map(ev=>(
-              <div key={ev.id} onClick={()=>{setEventModal(ev);setDayModal(null);}} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f5f5f5",cursor:"pointer"}}>
-                <div style={{width:3,height:32,borderRadius:2,background:ev.color||EVENT_COLORS[0],flexShrink:0}}/>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:600,color:"#111"}}>{ev.title}</div>
-                  {ev.time&&<div style={{fontSize:11,color:"#bbb",marginTop:1}}>{ev.time}{ev.endTime?` – ${ev.endTime}`:""}</div>}
-                </div>
-                <span style={{fontSize:13,color:"#ddd"}}>›</span>
-              </div>
-            ))
-          }
-          <button onClick={()=>{setEventModal({date:dayModal});setDayModal(null);}} style={{width:"100%",marginTop:14,padding:"13px",background:"#111",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>＋ Add Event</button>
-        </Modal>
-      )}
-
-
-      {/* Event / Task modals */}
-      {eventModal&&(
+      {selectedDate && (
         <EventModal
-          ev={eventModal.id?eventModal:{date:eventModal.date||today}}
-          isNew={!eventModal.id}
-          onSave={eventModal.id?(p)=>editEvent(eventModal.id,p):addEvent}
-          onDelete={eventModal.id?()=>{delEvent(eventModal.id);setEventModal(null);}:null}
-          onClose={()=>setEventModal(null)}
-        />
-      )}
-      {taskModal&&(
-        <TaskModal
-          task={taskModal==="add"?{}:taskModal}
-          isNew={taskModal==="add"}
-          onSave={taskModal==="add"?addTask:(p)=>editTask(taskModal.id,p)}
-          onDelete={taskModal!=="add"?()=>{delTask(taskModal.id);setTaskModal(null);}:null}
-          onClose={()=>setTaskModal(null)}
+          date={selectedDate}
+          events={events}
+          setEvents={setEvents}
+          onClose={() => setSelectedDate(null)}
         />
       )}
     </div>
   );
 }
 
-function TaskRow({task:t,onToggle,onTap}){
-  const cat=CAT_MAP[t.cat];
-  const today=todayKey();
-  const overdue=t.dueDate&&t.dueDate<today&&!t.done;
-  return(
-    <div onClick={onTap} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f8f8f8",cursor:"pointer"}}>
-      <button onClick={e=>{e.stopPropagation();onToggle();}} style={{
-        width:20,height:20,borderRadius:"50%",flexShrink:0,cursor:"pointer",
-        border:t.done?"none":"1.5px solid #ddd",background:t.done?"#111":"none",
-        display:"flex",alignItems:"center",justifyContent:"center"
-      }}>
-        {t.done&&<span style={{fontSize:9,color:"#fff"}}>✓</span>}
-      </button>
-      <div style={{flex:1}}>
-        <div style={{fontSize:13,color:t.done?"#ccc":"#333",textDecoration:t.done?"line-through":"none"}}>{t.title}</div>
-        {(cat||t.dueDate)&&(
-          <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>
-            {cat&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:8,background:cat.bg,color:cat.color,fontWeight:600}}>{cat.label}</span>}
-            {t.dueDate&&<span style={{fontSize:10,color:overdue?"#FF6B6B":"#bbb"}}>{overdue?"⚠ ":""}Due {fmtShort(t.dueDate)}</span>}
+function EventModal({ date, events, setEvents, onClose }) {
+  const dayEvents = events.filter(e => e.date===date);
+  const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [title, setTitle] = useState("");
+  const [time, setTime] = useState("");
+  const [color, setColor] = useState("#222");
+  const fmted = new Date(date+"T00:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
+
+  const saveEvent = () => {
+    if (!title.trim()) return;
+    if (editId) {
+      setEvents(evs => evs.map(e => e.id===editId?{...e,title:title.trim(),time,color}:e));
+    } else {
+      setEvents(evs => [...evs,{id:Date.now(),date,title:title.trim(),time,color}]);
+    }
+    setTitle(""); setTime(""); setColor("#222"); setAdding(false); setEditId(null);
+  };
+
+  const startEdit = e => { setEditId(e.id);setTitle(e.title);setTime(e.time||"");setColor(e.color||"#222");setAdding(true); };
+  const del = id => setEvents(evs => evs.filter(e => e.id!==id));
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"flex-end", zIndex:100 }} onClick={onClose}>
+      <div style={{ background:"#fff", borderRadius:"20px 20px 0 0", width:"100%", padding:"20px 16px 40px", maxHeight:"80vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <span style={{ fontWeight:700, fontSize:16 }}>{fmted}</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:"#333" }}>×</button>
+        </div>
+
+        {dayEvents.map(e => (
+          <div key={e.id} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, padding:"10px 12px", background:"#f8f8f8", borderRadius:12 }}>
+            <div style={{ width:10, height:10, borderRadius:"50%", background:e.color||"#222", flexShrink:0 }} />
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:14, fontWeight:600 }}>{e.title}</div>
+              {e.time && <div style={{ fontSize:12, color:"#999" }}>{e.time}</div>}
+            </div>
+            <button onClick={() => startEdit(e)} style={{ background:"none", border:"none", fontSize:15, cursor:"pointer", color:"#666" }}>✎</button>
+            <button onClick={() => del(e.id)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#ccc" }}>×</button>
+          </div>
+        ))}
+
+        {adding ? (
+          <div style={{ marginTop:8 }}>
+            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Event title"
+              style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:12, marginBottom:8, boxSizing:"border-box", outline:"none" }}
+            />
+            <input value={time} onChange={e=>setTime(e.target.value)} type="time"
+              style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:12, marginBottom:8, boxSizing:"border-box", outline:"none" }}
+            />
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              {EVENT_COLORS.map(c => (
+                <button key={c} onClick={() => setColor(c)} style={{ width:26, height:26, borderRadius:"50%", background:c, border:color===c?"3px solid #333":"2px solid transparent", cursor:"pointer" }} />
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => {setAdding(false);setEditId(null);setTitle("");setTime("");}} style={{ flex:1, padding:"11px", background:"#f0f0f0", border:"none", borderRadius:12, fontSize:14, cursor:"pointer" }}>Cancel</button>
+              <button onClick={saveEvent} style={{ flex:1, padding:"11px", background:"#000", color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer" }}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setAdding(true)} style={{ width:"100%", padding:"12px", background:"#000", color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Event</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Tasks ──────────────────────────────────────────────────────────────────
+function TaskSection({ tasks, setTasks }) {
+  const [adding, setAdding] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [newMemo, setNewMemo] = useState("");
+  const [newDeadline, setNewDeadline] = useState("");
+  const [priority, setPriority] = useState("High");
+  const [editId, setEditId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editMemo, setEditMemo] = useState("");
+  const [editDeadline, setEditDeadline] = useState("");
+  const [editPriority, setEditPriority] = useState("High");
+
+  // Touch drag state
+  const dragIdx = useRef(null);
+  const taskRefs = useRef([]);
+
+  const sorted = [...tasks].sort((a,b) => ({High:0,Med:1,Low:2}[a.priority]-{High:0,Med:1,Low:2}[b.priority]));
+
+  const addTask = () => {
+    if (!newTask.trim()) return;
+    setTasks(ts => [...ts, {id:Date.now(), title:newTask.trim(), priority, memo:newMemo.trim(), deadline:newDeadline}]);
+    setNewTask(""); setNewMemo(""); setNewDeadline(""); setAdding(false);
+  };
+
+  const check = id => setTasks(ts => ts.filter(t => t.id!==id));
+  const startEdit = t => { setEditId(t.id);setEditText(t.title);setEditPriority(t.priority);setEditMemo(t.memo||"");setEditDeadline(t.deadline||""); };
+  const saveEdit = () => { setTasks(ts=>ts.map(t=>t.id===editId?{...t,title:editText,priority:editPriority,memo:editMemo,deadline:editDeadline}:t)); setEditId(null); };
+
+  const handleTouchStart = (e, i) => { dragIdx.current = i; };
+  const handleTouchEnd = (e) => {
+    if (dragIdx.current === null) return;
+    const touch = e.changedTouches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const target = el?.closest("[data-taskidx]");
+    if (target) {
+      const toIdx = parseInt(target.dataset.taskidx);
+      if (toIdx !== dragIdx.current) {
+        const copy = [...tasks];
+        const fromSorted = sorted[dragIdx.current];
+        const toSorted = sorted[toIdx];
+        const fromI = copy.findIndex(t=>t.id===fromSorted.id);
+        const toI = copy.findIndex(t=>t.id===toSorted.id);
+        const [rem] = copy.splice(fromI,1);
+        copy.splice(toI,0,rem);
+        setTasks(copy);
+      }
+    }
+    dragIdx.current = null;
+  };
+
+  const inputStyle = { width:"100%", fontSize:14, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit" };
+
+  return (
+    <div style={{ padding:"0 16px 16px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <span style={{ fontWeight:700, fontSize:15 }}>Tasks</span>
+        <button onClick={() => setAdding(true)} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 14px", fontSize:13, cursor:"pointer" }}>+ Add</button>
+      </div>
+
+      {adding && (
+        <div style={{ marginBottom:12, padding:12, background:"#f8f8f8", borderRadius:14 }}>
+          <input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Task title"
+            style={inputStyle} onKeyDown={e=>e.key==="Enter"&&addTask()}
+          />
+          <input value={newDeadline} onChange={e=>setNewDeadline(e.target.value)} type="date"
+            style={inputStyle}
+          />
+          <textarea value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Memo (optional)"
+            style={{ ...inputStyle, resize:"none", height:60 }}
+          />
+          <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+            {["High","Med","Low"].map(p => (
+              <button key={p} onClick={() => setPriority(p)} style={{
+                flex:1, padding:"6px", border:"none", borderRadius:8, cursor:"pointer",
+                background:priority===p?PRIORITY_COLOR[p]:"#e8e8e8",
+                color:priority===p?"#fff":"#666", fontSize:12, fontWeight:600
+              }}>{p}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setAdding(false)} style={{ flex:1, padding:"9px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
+            <button onClick={addTask} style={{ flex:1, padding:"9px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Add</button>
+          </div>
+        </div>
+      )}
+
+      {sorted.map((t, i) => (
+        editId===t.id ? (
+          <div key={t.id} style={{ marginBottom:8, padding:12, background:"#f8f8f8", borderRadius:12 }}>
+            <input value={editText} onChange={e=>setEditText(e.target.value)} style={inputStyle} />
+            <input value={editDeadline} onChange={e=>setEditDeadline(e.target.value)} type="date" style={inputStyle} />
+            <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Memo..."
+              style={{ ...inputStyle, resize:"none", height:56 }}
+            />
+            <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+              {["High","Med","Low"].map(p => (
+                <button key={p} onClick={() => setEditPriority(p)} style={{
+                  flex:1, padding:"5px", border:"none", borderRadius:6, cursor:"pointer",
+                  background:editPriority===p?PRIORITY_COLOR[p]:"#e8e8e8",
+                  color:editPriority===p?"#fff":"#666", fontSize:11, fontWeight:600
+                }}>{p}</button>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"7px", background:"#e8e8e8", border:"none", borderRadius:8, cursor:"pointer", fontSize:12 }}>Cancel</button>
+              <button onClick={saveEdit} style={{ flex:1, padding:"7px", background:"#000", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:600 }}>Save</button>
+            </div>
+          </div>
+        ) : (
+          <div key={t.id}
+            data-taskidx={i}
+            ref={el => taskRefs.current[i]=el}
+            onTouchStart={e=>handleTouchStart(e,i)}
+            onTouchEnd={handleTouchEnd}
+            style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8, padding:"11px 12px", background:"#f8f8f8", borderRadius:12, cursor:"grab", userSelect:"none" }}
+          >
+            <button onClick={() => check(t.id)} style={{ width:20, height:20, borderRadius:"50%", border:`2px solid ${PRIORITY_COLOR[t.priority]}`, background:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:14, fontWeight:500 }}>{t.title}</div>
+              {t.deadline && <div style={{ fontSize:11, color:"#999", marginTop:2 }}>📅 {t.deadline}</div>}
+              {t.memo && <div style={{ fontSize:12, color:"#aaa", marginTop:2 }}>{t.memo}</div>}
+            </div>
+            <span style={{ fontSize:10, color:PRIORITY_COLOR[t.priority], fontWeight:700, flexShrink:0, marginTop:3 }}>{t.priority}</span>
+            <button onClick={() => startEdit(t)} style={{ background:"none", border:"none", cursor:"pointer", color:"#bbb", fontSize:14, padding:4 }}>✎</button>
+          </div>
+        )
+      ))}
+
+      {tasks.length===0 && !adding && (
+        <div style={{ textAlign:"center", color:"#ccc", fontSize:14, padding:"24px 0" }}>No tasks yet</div>
+      )}
+    </div>
+  );
+}
+
+// ── Diary ──────────────────────────────────────────────────────────────────
+function DiaryTab({ diary, setDiary, habits, setHabits }) {
+  const [view, setView] = useState("Write");
+  const [editDate, setEditDate] = useState(null); // null = today
+  const [detailDate, setDetailDate] = useState(null);
+
+  const handleSelectHistory = (date) => {
+    setDetailDate(date);
+  };
+
+  const handleEditFromDetail = (date) => {
+    setDetailDate(null);
+    setEditDate(date);
+    setView("Write");
+  };
+
+  const handleTabChange = (v) => {
+    setView(v);
+    if (v === "Write") setEditDate(null);
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column" }}>
+      <div style={{ display:"flex", borderBottom:"1px solid #f0f0f0", padding:"0 16px", background:"#fff" }}>
+        {["Write","History"].map(v => (
+          <button key={v} onClick={() => handleTabChange(v)} style={{
+            padding:"10px 20px", background:"none", border:"none", cursor:"pointer",
+            fontSize:14, fontWeight:view===v?700:400,
+            color:view===v?"#000":"#aaa",
+            borderBottom:view===v?"2px solid #000":"2px solid transparent"
+          }}>{v}</button>
+        ))}
+      </div>
+
+      {view==="Write" && <DiaryWrite diary={diary} setDiary={setDiary} habits={habits} setHabits={setHabits} date={editDate} onBackToToday={() => setEditDate(null)} />}
+      {view==="History" && <DiaryHistory diary={diary} setDiary={setDiary} onSelect={handleSelectHistory} />}
+
+      {detailDate && (
+        <DiaryDetailModal date={detailDate} diary={diary} setDiary={setDiary} onClose={() => setDetailDate(null)} onEdit={handleEditFromDetail} />
+      )}
+    </div>
+  );
+}
+
+function DiaryWrite({ diary, setDiary, habits, setHabits, date: dateProp, onBackToToday }) {
+  const date = dateProp || todayStr();
+  const isToday = date === todayStr();
+  const entry = diary[date] || {};
+
+  const [addingHabit, setAddingHabit] = useState(false);
+  const [newHabit, setNewHabit] = useState("");
+  const [showDone, setShowDone] = useState(isToday && !!entry.submitted);
+
+  const update = fields => setDiary(d => ({...d, [date]:{...d[date],...fields}}));
+
+  const mood = entry.mood || "";
+  const checkedHabits = entry.habits || [];
+  const text = entry.text || "";
+  const photos = entry.photos || [];
+
+  const toggleHabit = h => {
+    const hs = checkedHabits.includes(h) ? checkedHabits.filter(x=>x!==h) : [...checkedHabits,h];
+    update({ habits:hs });
+  };
+
+  const addHabit = () => {
+    if (!newHabit.trim()) return;
+    setHabits(hs => [...hs, newHabit.trim()]);
+    setNewHabit(""); setAddingHabit(false);
+  };
+
+  const addPhoto = e => {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => update({ photos:[...photos, ev.target.result] });
+    reader.readAsDataURL(file);
+  };
+
+  const calcStreak = () => {
+    let streak=0; const d=new Date();
+    while (true) {
+      const k = d.toISOString().slice(0,10);
+      if (!diary[k]?.submitted) break;
+      streak++; d.setDate(d.getDate()-1);
+    }
+    return streak;
+  };
+
+  const submit = () => {
+    update({ submitted:true, submittedAt:new Date().toISOString() });
+    if (isToday) setShowDone(true);
+  };
+
+  // Done screen (today only)
+  if (isToday && (showDone || entry.submitted)) {
+    const streak = calcStreak();
+    return (
+      <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:40, textAlign:"center" }}>
+        <div style={{ fontSize:52, marginBottom:16 }}>🌙</div>
+        <div style={{ fontSize:22, fontWeight:700, marginBottom:8 }}>今日もお疲れ様</div>
+        <div style={{ fontSize:14, color:"#888", lineHeight:1.6, marginBottom:20 }}>
+          一日一日の積み重ねが大きな変化を生む。<br/>明日も全力で。
+        </div>
+        {streak > 0 && (
+          <div style={{ background:"#FFF3E0", borderRadius:20, padding:"6px 18px", fontSize:14, fontWeight:700, color:"#E65100", marginBottom:20 }}>
+            🔥 {streak} day{streak>1?"s":""} in a row
+          </div>
+        )}
+        {checkedHabits.length > 0 && (
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center", marginBottom:24 }}>
+            {checkedHabits.map((h,i) => (
+              <span key={i} style={{ background:"#000", color:"#fff", borderRadius:20, padding:"4px 12px", fontSize:12 }}>{h}</span>
+            ))}
+          </div>
+        )}
+        <button onClick={() => { setShowDone(false); update({submitted:false}); }} style={{
+          padding:"11px 24px", background:"none", border:"1.5px solid #e0e0e0", borderRadius:20, fontSize:14, cursor:"pointer"
+        }}>✎ Edit today's entry</button>
+      </div>
+    );
+  }
+
+  const fmtedDate = !isToday ? new Date(date+"T00:00:00").toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"}) : null;
+    <div style={{ padding:"16px 16px 80px" }}>
+      {/* Mood */}
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>MOOD</div>
+        <div style={{ display:"flex", gap:6 }}>
+          {MOOD_OPTIONS.map(m => (
+            <button key={m} onClick={() => update({mood:m})} style={{
+              fontSize:26, background:mood===m?"#f0f0f0":"transparent",
+              border:"none", borderRadius:10, padding:"6px 8px", cursor:"pointer",
+              opacity:mood&&mood!==m?0.35:1, transition:"all 0.15s"
+            }}>{m}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Habits */}
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>HABITS</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {habits.map(h => (
+            <button key={h} onClick={() => toggleHabit(h)} style={{
+              padding:"6px 14px", borderRadius:20, border:"1.5px solid",
+              borderColor:checkedHabits.includes(h)?"#000":"#e0e0e0",
+              background:checkedHabits.includes(h)?"#000":"#fff",
+              color:checkedHabits.includes(h)?"#fff":"#666",
+              fontSize:13, cursor:"pointer"
+            }}>{h}</button>
+          ))}
+          {addingHabit ? (
+            <div style={{ display:"flex", gap:4 }}>
+              <input value={newHabit} onChange={e=>setNewHabit(e.target.value)} placeholder="Habit name"
+                style={{ fontSize:13, padding:"5px 10px", border:"1px solid #e0e0e0", borderRadius:20, outline:"none", width:110 }}
+                onKeyDown={e=>e.key==="Enter"&&addHabit()} autoFocus
+              />
+              <button onClick={addHabit} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontSize:12 }}>+</button>
+            </div>
+          ) : (
+            <button onClick={() => setAddingHabit(true)} style={{ padding:"6px 14px", borderRadius:20, border:"1.5px dashed #ccc", background:"transparent", color:"#aaa", fontSize:13, cursor:"pointer" }}>+ Add</button>
+          )}
+        </div>
+      </div>
+
+      {/* Text */}
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>TODAY</div>
+        <textarea value={text} onChange={e=>update({text:e.target.value})} placeholder="Write about your day..."
+          style={{ width:"100%", minHeight:130, fontSize:15, padding:"12px", border:"1.5px solid #ebebeb", borderRadius:14, resize:"none", outline:"none", boxSizing:"border-box", lineHeight:1.6, fontFamily:"inherit" }}
+        />
+      </div>
+
+      {/* Photos */}
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>PHOTOS</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          {photos.map((p, i) => (
+            <div key={i} style={{ position:"relative", width:80, height:80 }}>
+              <img src={p} alt="" style={{ width:80, height:80, objectFit:"cover", borderRadius:10 }} />
+              <button onClick={() => update({photos:photos.filter((_,j)=>j!==i)})} style={{ position:"absolute", top:-4, right:-4, background:"#e53935", color:"#fff", border:"none", borderRadius:"50%", width:18, height:18, cursor:"pointer", fontSize:11 }}>×</button>
+            </div>
+          ))}
+          <label style={{ width:80, height:80, border:"1.5px dashed #ddd", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#ccc", fontSize:26 }}>
+            +<input type="file" accept="image/*" onChange={addPhoto} style={{ display:"none" }} />
+          </label>
+        </div>
+      </div>
+
+      {isToday
+        ? <button onClick={submit} style={{ width:"100%", padding:"14px", background:"#000", color:"#fff", border:"none", borderRadius:14, fontSize:15, fontWeight:700, cursor:"pointer" }}>Submit ✓</button>
+        : <button onClick={onBackToToday} style={{ width:"100%", padding:"14px", background:"#f0f0f0", color:"#333", border:"none", borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}>← Back</button>
+      }
+    </div>
+  );
+}
+
+// ── Diary History (BeReal style) ───────────────────────────────────────────
+function DiaryHistory({ diary, setDiary, onSelect }) {
+  const entries = Object.entries(diary)
+    .filter(([,v]) => v.submitted || v.text || (v.photos?.length))
+    .sort(([a],[b]) => b.localeCompare(a));
+
+  if (entries.length===0) {
+    return <div style={{ textAlign:"center", color:"#ccc", fontSize:14, padding:48 }}>No entries yet</div>;
+  }
+
+  return (
+    <div style={{ padding:"12px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, paddingBottom:80 }}>
+      {entries.map(([date, entry]) => (
+        <BeRealCard key={date} date={date} entry={entry} onClick={() => onSelect(date)} />
+      ))}
+    </div>
+  );
+}
+
+function BeRealCard({ date, entry, onClick }) {
+  const fmted = new Date(date+"T00:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"});
+  const photo = entry.photos?.[0];
+  const grad = GRADIENTS[date.charCodeAt(8) % GRADIENTS.length];
+
+  return (
+    <div onClick={onClick} style={{ borderRadius:16, overflow:"hidden", position:"relative", aspectRatio:"3/4", cursor:"pointer", background:photo?"#111":grad, boxShadow:"0 2px 12px rgba(0,0,0,0.1)" }}>
+      {photo ? (
+        <img src={photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+      ) : (
+        <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:42 }}>
+          {entry.mood || "📝"}
+        </div>
+      )}
+      {/* Overlay */}
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"30px 10px 10px", background:"linear-gradient(transparent,rgba(0,0,0,0.65))" }}>
+        <div style={{ color:"#fff", fontSize:12, fontWeight:700 }}>{fmted}</div>
+        {entry.mood && <div style={{ fontSize:18, lineHeight:1.2 }}>{entry.mood}</div>}
+        {entry.habits?.length > 0 && (
+          <div style={{ display:"flex", gap:3, flexWrap:"wrap", marginTop:3 }}>
+            {entry.habits.slice(0,2).map((h,i) => (
+              <span key={i} style={{ background:"rgba(255,255,255,0.25)", color:"#fff", borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{h}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      {entry.submitted && (
+        <div style={{ position:"absolute", top:8, right:8, width:8, height:8, borderRadius:"50%", background:"#4CAF50" }} />
+      )}
+    </div>
+  );
+}
+
+function DiaryDetailModal({ date, diary, setDiary, onClose, onEdit }) {
+  const entry = diary[date] || {};
+  const fmted = new Date(date+"T00:00:00").toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+
+  const del = () => {
+    if (window.confirm("Delete this entry?")) {
+      setDiary(d => { const n={...d}; delete n[date]; return n; });
+      onClose();
+    }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }} onClick={onClose}>
+      <div style={{ background:"#fff", borderRadius:"22px 22px 0 0", width:"100%", maxHeight:"88vh", overflowY:"auto", padding:"22px 18px 48px" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:15 }}>{fmted}</div>
+            {entry.mood && <div style={{ fontSize:28, marginTop:4 }}>{entry.mood}</div>}
+          </div>
+          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+            <button onClick={() => onEdit(date)} style={{ background:"none", border:"none", cursor:"pointer", color:"#1565C0", fontSize:13 }}>Edit</button>
+            <button onClick={del} style={{ background:"none", border:"none", cursor:"pointer", color:"#e53935", fontSize:13 }}>Delete</button>
+            <button onClick={onClose} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:"#333" }}>×</button>
+          </div>
+        </div>
+
+        {entry.habits?.length > 0 && (
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
+            {entry.habits.map((h,i) => <span key={i} style={{ background:"#000", color:"#fff", borderRadius:20, padding:"4px 12px", fontSize:12 }}>{h}</span>)}
+          </div>
+        )}
+        {entry.text && <p style={{ fontSize:15, lineHeight:1.7, color:"#333", marginBottom:16, whiteSpace:"pre-wrap" }}>{entry.text}</p>}
+        {entry.photos?.length > 0 && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6 }}>
+            {entry.photos.map((p,i) => <img key={i} src={p} alt="" style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:10 }} />)}
           </div>
         )}
       </div>
@@ -444,538 +726,109 @@ function TaskRow({task:t,onToggle,onTap}){
   );
 }
 
-function MiniTaskRow({task:t, onToggle, onTap}){
-  const cat=CAT_MAP[t.cat];
-  return(
-    <div onClick={onTap} style={{display:"flex",alignItems:"flex-start",gap:7,padding:"6px 0",borderBottom:"1px solid #f0f0f0",cursor:"pointer"}}>
-      <button onClick={e=>{e.stopPropagation();onToggle();}} style={{
-        width:16,height:16,borderRadius:"50%",flexShrink:0,marginTop:1,cursor:"pointer",
-        border:"1.5px solid #ddd",background:"none",
-        display:"flex",alignItems:"center",justifyContent:"center"
-      }}/>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,color:"#333",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
-        {cat&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:6,background:cat.bg,color:cat.color,fontWeight:600}}>{cat.label}</span>}
-      </div>
-    </div>
-  );
-}
+// ── Goals ──────────────────────────────────────────────────────────────────
+function GoalsTab({ goals, setGoals }) {
+  const [period, setPeriod] = useState("Month");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newColor, setNewColor] = useState(GOAL_COLORS[0]);
+  const [newMemo, setNewMemo] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editMemo, setEditMemo] = useState("");
 
-// ── GOALS ──────────────────────────────────────────────────
-const GOAL_PERIODS_NEW = ["month","year"];
+  const filtered = period==="🏆"
+    ? goals.filter(g => g.achieved)
+    : goals.filter(g => g.period===period && !g.achieved);
 
-function Goals({data,addGoal,editGoal,delGoal}){
-  const[modal,setModal]=useState(null);
-  const[period,setPeriod]=useState("month");
+  const addGoal = () => {
+    if (!newTitle.trim()) return;
+    setGoals(gs => [...gs, {id:Date.now(), title:newTitle.trim(), color:newColor, memo:newMemo, period, achieved:false}]);
+    setNewTitle(""); setNewMemo(""); setShowAdd(false);
+  };
 
-  const active=data.goals.filter(g=>g.period===period&&!g.done);
-  const achieved=data.goals.filter(g=>g.period===period&&g.done);
-  const allAchieved=data.goals.filter(g=>g.done);
-  const showAchieved=period==="achieved";
+  const toggle = id => setGoals(gs => gs.map(g => g.id===id ? {...g, achieved:!g.achieved} : g));
+  const del = id => setGoals(gs => gs.filter(g => g.id!==id));
+  const startEdit = g => { setEditId(g.id); setEditTitle(g.title); setEditMemo(g.memo||""); };
+  const saveEdit = () => { setGoals(gs => gs.map(g => g.id===editId ? {...g, title:editTitle, memo:editMemo} : g)); setEditId(null); };
 
-  return(
-    <div style={S.body}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-        <span style={{fontSize:24,fontWeight:800,color:"#111",letterSpacing:-0.5}}>Goals</span>
-        <IconBtn onClick={()=>setModal("add")}>＋</IconBtn>
-      </div>
-
-      {/* Period tabs */}
-      <div style={{display:"flex",background:"#fff",border:"1px solid #efefef",borderRadius:12,padding:3,marginBottom:18,gap:3,boxShadow:BOX}}>
-        {[...GOAL_PERIODS_NEW,"achieved"].map(p=>(
-          <button key={p} onClick={()=>setPeriod(p)} style={{flex:1,padding:"8px 0",borderRadius:9,border:"none",background:period===p?"#111":"none",color:period===p?"#fff":"#bbb",fontSize:12,fontWeight:period===p?700:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{p==="achieved"?"🏆":p}</button>
+  return (
+    <div style={{ padding:"16px 16px 80px" }}>
+      {!isToday && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+          <button onClick={onBackToToday} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#888" }}>‹</button>
+          <span style={{ fontSize:13, fontWeight:600, color:"#888" }}>{fmtedDate}</span>
+        </div>
+      )}
+      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
+        {["Month","Year","🏆"].map(p => (
+          <button key={p} onClick={() => setPeriod(p)} style={{
+            flex:1, padding:"8px", borderRadius:20, border:"none", cursor:"pointer",
+            background:period===p?"#000":"#f0f0f0",
+            color:period===p?"#fff":"#666",
+            fontSize:p==="🏆"?18:14, fontWeight:period===p?600:400
+          }}>{p}</button>
         ))}
       </div>
 
-      {/* Achieved tab */}
-      {showAchieved&&(
-        <>
-          {allAchieved.length===0
-            ? <Empty text="No achieved goals yet"/>
-            : allAchieved.map(g=>(
-              <GoalRow key={g.id} goal={g} onToggle={()=>editGoal(g.id,{done:false})} onTap={()=>setModal(g)} done/>
-            ))
-          }
-        </>
-      )}
-
-      {/* Active goals */}
-      {!showAchieved&&(
-        <>
-          {active.length===0
-            ? <Empty text={`No ${period}ly goals — tap ＋ to add`}/>
-            : active.map(g=>(
-              <GoalRow key={g.id} goal={g} onToggle={()=>editGoal(g.id,{done:true})} onTap={()=>setModal(g)}/>
-            ))
-          }
-        </>
-      )}
-
-      {modal&&(
-        <GoalModal
-          goal={modal==="add"?{period}:modal}
-          isNew={modal==="add"}
-          onSave={modal==="add"?addGoal:(p)=>editGoal(modal.id,p)}
-          onDelete={modal!=="add"?()=>{delGoal(modal.id);setModal(null);}:null}
-          onClose={()=>setModal(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function GoalRow({goal:g, onToggle, onTap, done}){
-  return(
-    <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"12px 14px",background:"#fff",border:"1px solid #efefef",borderRadius:14,marginBottom:8,boxShadow:BOX,opacity:done?0.6:1}}>
-      <button onClick={e=>{e.stopPropagation();onToggle();}} style={{
-        width:20,height:20,borderRadius:"50%",flexShrink:0,marginTop:1,cursor:"pointer",
-        border:done?"none":"2px solid",borderColor:g.color||"#ddd",
-        background:done?g.color||"#111":"none",
-        display:"flex",alignItems:"center",justifyContent:"center"
-      }}>
-        {done&&<span style={{fontSize:10,color:"#fff"}}>✓</span>}
-      </button>
-      <div style={{flex:1,cursor:"pointer"}} onClick={onTap}>
-        <div style={{fontSize:14,fontWeight:600,color:done?"#aaa":"#111",textDecoration:done?"line-through":"none"}}>{g.title}</div>
-        {g.memo&&<div style={{fontSize:12,color:"#bbb",marginTop:3,lineHeight:1.4}}>{g.memo}</div>}
-      </div>
-      <span style={{fontSize:14,color:"#e0e0e0",marginTop:1}}>›</span>
-    </div>
-  );
-}
-
-// ── JOURNAL ────────────────────────────────────────────────
-const DEFAULT_HABITS=[
-  {id:"gym",     label:"Gym",     emoji:"🏋️"},
-  {id:"english", label:"English", emoji:"📖"},
-  {id:"wake6",   label:"Wake 6am",emoji:"⏰"},
-];
-
-function Journal({data,updJournal}){
-  const[selKey,setSelKey]=useState(todayKey());
-  const[view,setView]=useState("write");
-  const[calYear,setCalYear]=useState(new Date().getFullYear());
-  const[calMonth,setCalMonth]=useState(new Date().getMonth());
-  const[detailKey,setDetailKey]=useState(null);
-  const[newHabit,setNewHabit]=useState("");
-  const[addingHabit,setAddingHabit]=useState(false);
-  const fileRef=useRef();
-  const today=todayKey();
-  const entry=data.journal[selKey]||{};
-
-  // custom habits stored per-user in journal meta
-  const customHabits=data.journal["__habits"]?.list||[];
-  const allHabits=[...DEFAULT_HABITS,...customHabits];
-
-  function addCustomHabit(){
-    if(!newHabit.trim()) return;
-    const h={id:"c_"+uid(),label:newHabit.trim(),emoji:"✦"};
-    updJournal("__habits",{list:[...customHabits,h]});
-    setNewHabit(""); setAddingHabit(false);
-  }
-  function removeCustomHabit(id){
-    updJournal("__habits",{list:customHabits.filter(h=>h.id!==id)});
-  }
-
-  function shiftDay(d){ const dt=parseKey(selKey); dt.setDate(dt.getDate()+d); setSelKey(toKey(dt)); }
-  function handlePhotos(e){
-    Array.from(e.target.files).forEach(file=>{
-      const r=new FileReader();
-      r.onload=ev=>updJournal(selKey,{photos:[...(data.journal[selKey]?.photos||entry.photos||[]),ev.target.result]});
-      r.readAsDataURL(file);
-    });
-  }
-  function removePhoto(idx){
-    const photos=[...(entry.photos||[])]; photos.splice(idx,1);
-    updJournal(selKey,{photos});
-  }
-  function toggleHabit(id){
-    const h=entry.habits||[];
-    updJournal(selKey,{habits:h.includes(id)?h.filter(x=>x!==id):[...h,id]});
-  }
-  function deleteEntry(){
-    updJournal(selKey,{text:"",photos:[],mood:null,habits:[]});
-  }
-  function shiftHistMonth(delta){
-    let m=calMonth+delta,y=calYear;
-    if(m<0){m=11;y--;} if(m>11){m=0;y++;}
-    setCalMonth(m); setCalYear(y);
-  }
-
-  // History calendar
-  const firstDay=new Date(calYear,calMonth,1).getDay();
-  const dim=new Date(calYear,calMonth+1,0).getDate();
-  const prevDim=new Date(calYear,calMonth,0).getDate();
-  const histCells=[];
-  for(let i=0;i<firstDay;i++) histCells.push({d:prevDim-firstDay+1+i,faded:true,idx:i});
-  for(let d=1;d<=dim;d++) histCells.push({d,faded:false,idx:firstDay+d-1});
-  const rem2=(7-histCells.length%7)%7;
-  for(let d=1;d<=rem2;d++) histCells.push({d,faded:true,idx:histCells.length});
-
-  // Streak: consecutive submitted days up to selKey
-  const streak=(()=>{
-    let count=0, d=new Date(selKey==="__habits"?todayKey():selKey);
-    while(true){
-      const k=toKey(d);
-      if(data.journal[k]?.submitted) count++;
-      else break;
-      d.setDate(d.getDate()-1);
-    }
-    return count;
-  })();
-
-  const detailEntry=detailKey?data.journal[detailKey]||{}:null;
-  const hasContent=entry.text||entry.photos?.length>0||(entry.habits||[]).length>0||entry.mood;
-
-  return(
-    <div style={S.body}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-        <span style={{fontSize:24,fontWeight:800,color:"#111",letterSpacing:-0.5}}>Diary</span>
-        <div style={{display:"flex",background:"#f0f0f0",borderRadius:8,padding:2,gap:2}}>
-          {["write","history"].map(v=>(
-            <button key={v} onClick={()=>setView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:view===v?"#fff":"none",color:view===v?"#111":"#bbb",fontSize:11,fontWeight:view===v?700:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{v==="write"?"Write":"History"}</button>
-          ))}
-        </div>
-      </div>
-
-      {view==="write"&&!entry.submitted&&(
-        <>
-          {/* Date nav */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#fff",border:"1px solid #efefef",borderRadius:14,padding:"11px 16px",marginBottom:12,boxShadow:BOX}}>
-            <button onClick={()=>shiftDay(-1)} style={S.arrow}>‹</button>
-            <div style={{fontSize:14,fontWeight:700,color:"#111"}}>
-              {selKey===today?"Today":parseKey(selKey).toLocaleDateString("en-AU",{weekday:"short",month:"short",day:"numeric"})}
+      {filtered.map(g => (
+        editId===g.id ? (
+          <div key={g.id} style={{ marginBottom:10, padding:14, background:"#f8f8f8", borderRadius:14 }}>
+            <input value={editTitle} onChange={e=>setEditTitle(e.target.value)}
+              style={{ width:"100%", fontSize:14, padding:"8px 10px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none" }}
+            />
+            <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Notes..."
+              style={{ width:"100%", fontSize:13, padding:"8px 10px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", resize:"none", height:60, outline:"none", fontFamily:"inherit" }}
+            />
+            <div style={{ display:"flex", gap:8, marginTop:8 }}>
+              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"8px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
+              <button onClick={saveEdit} style={{ flex:1, padding:"8px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Save</button>
             </div>
-            <button onClick={()=>shiftDay(1)} disabled={selKey>=today} style={{...S.arrow,opacity:selKey>=today?0.2:1}}>›</button>
           </div>
-
-          {/* Today: Mood + Habits */}
-          <div style={{background:"#fff",border:"1px solid #efefef",borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:BOX}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div style={S.sectionLabel}>Today</div>
-              <button onClick={()=>setAddingHabit(true)} style={{fontSize:11,color:"#bbb",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>＋ Add habit</button>
+        ) : (
+          <div key={g.id} style={{ display:"flex", gap:10, marginBottom:10, padding:"13px 14px", background:"#f8f8f8", borderRadius:14 }}>
+            <button onClick={() => toggle(g.id)} style={{ width:22, height:22, borderRadius:"50%", border:`2.5px solid ${g.color}`, background:g.achieved?g.color:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:15, fontWeight:600, textDecoration:g.achieved?"line-through":"none", color:g.achieved?"#bbb":"#111" }}>{g.title}</div>
+              {g.memo && <div style={{ fontSize:13, color:"#999", marginTop:2 }}>{g.memo}</div>}
             </div>
-            {/* Mood */}
-            <div style={{display:"flex",gap:5,marginBottom:12}}>
-              {MOODS.map(m=>(
-                <button key={m.l} onClick={()=>updJournal(selKey,{mood:entry.mood===m.l?null:m.l})} style={{
-                  flex:1,padding:"6px 2px",borderRadius:8,
-                  border:entry.mood===m.l?"1.5px solid #111":"1.5px solid #eee",
-                  background:entry.mood===m.l?"#111":"#fff",
-                  cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2
-                }}>
-                  <span style={{fontSize:14}}>{m.e}</span>
-                  <span style={{fontSize:8,color:entry.mood===m.l?"#fff":"#bbb",fontWeight:600}}>{m.l}</span>
-                </button>
-              ))}
-            </div>
-            {/* Habits compact */}
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {allHabits.map(h=>{
-                const done=(entry.habits||[]).includes(h.id);
-                const isCustom=!DEFAULT_HABITS.find(d=>d.id===h.id);
-                return(
-                  <div key={h.id} style={{display:"flex",alignItems:"center",gap:0}}>
-                    <button onClick={()=>toggleHabit(h.id)} style={{
-                      display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:20,
-                      border:done?"1.5px solid #111":"1.5px solid #eee",
-                      background:done?"#111":"#fafafa",
-                      cursor:"pointer",fontFamily:"inherit"
-                    }}>
-                      <span style={{fontSize:12}}>{h.emoji}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:done?"#fff":"#777"}}>{h.label}</span>
-                    </button>
-                    {isCustom&&(
-                      <button onClick={()=>removeCustomHabit(h.id)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:14,lineHeight:1,padding:"0 2px",marginLeft:2}}>×</button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Add habit inline */}
-            {addingHabit&&(
-              <div style={{display:"flex",gap:6,marginTop:10}}>
-                <input value={newHabit} onChange={e=>setNewHabit(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&addCustomHabit()}
-                  placeholder="Habit name..." autoFocus
-                  style={{...S.input,flex:1,fontSize:13,padding:"7px 10px"}}/>
-                <button onClick={addCustomHabit} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#111",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Add</button>
-                <button onClick={()=>{setAddingHabit(false);setNewHabit("");}} style={{padding:"7px 10px",borderRadius:10,border:"1px solid #eee",background:"none",color:"#bbb",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
-              </div>
+            {!g.achieved && (
+              <button onClick={() => startEdit(g)} style={{ background:"none", border:"none", cursor:"pointer", color:"#bbb", fontSize:14, padding:"2px 4px" }}>✎</button>
             )}
+            <button onClick={() => del(g.id)} style={{ background:"none", border:"none", cursor:"pointer", color:"#ddd", fontSize:18, padding:"2px 4px" }}>×</button>
           </div>
+        )
+      ))}
 
-          {/* Entry */}
-          <div style={{background:"#fff",border:"1px solid #efefef",borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:BOX}}>
-            <div style={S.sectionLabel}>Entry</div>
-            <textarea value={entry.text||""} onChange={e=>updJournal(selKey,{text:e.target.value})}
-              placeholder="今日どうだった？..." rows={6}
-              style={{width:"100%",background:"none",border:"none",resize:"none",color:"#333",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",lineHeight:1.8}}/>
-          </div>
-
-          {/* Photos */}
-          <div style={{background:"#fff",border:"1px solid #efefef",borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:BOX}}>
-            <div style={S.sectionLabel}>Photos</div>
-            <input ref={fileRef} type="file" accept="image/*" multiple onChange={handlePhotos} style={{display:"none"}}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
-              {(entry.photos||[]).map((src,i)=>(
-                <div key={i} style={{position:"relative",paddingTop:"100%"}}>
-                  <img src={src} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:8}}/>
-                  <button onClick={()=>removePhoto(i)} style={{position:"absolute",top:4,right:4,width:20,height:20,borderRadius:"50%",background:"rgba(0,0,0,0.5)",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                </div>
-              ))}
-              <button onClick={()=>fileRef.current.click()} style={{paddingTop:"100%",position:"relative",background:"#fafafa",border:"1.5px dashed #e8e8e8",borderRadius:8,cursor:"pointer"}}>
-                <span style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#ccc",fontSize:20}}>＋</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Delete entry */}
-          {hasContent&&(
-            <button onClick={deleteEntry} style={{width:"100%",padding:"12px",background:"none",border:"1px solid #fce0e0",borderRadius:12,color:"#e08080",fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
-              Delete entry
-            </button>
-          )}
-
-          {/* Submit */}
-          <button onClick={()=>updJournal(selKey,{submitted:true})} style={{width:"100%",padding:"15px",background:"#111",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:16}}>
-            Submit ✓
-          </button>
-        </>
-      )}
-
-      {/* ── Submitted screen ── */}
-      {view==="write"&&entry.submitted&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px 32px",textAlign:"center",minHeight:"70vh"}}>
-          <div style={{fontSize:64,marginBottom:20}}>🌙</div>
-          <div style={{fontSize:26,fontWeight:800,color:"#111",letterSpacing:-0.5,marginBottom:10}}>
-            {selKey===today?"今日もお疲れ様":"よく頑張ったね"}
-          </div>
-
-          {/* Streak */}
-          {streak>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:8,background:"#fff8f0",border:"1.5px solid #ffe0b0",borderRadius:20,padding:"8px 20px",marginBottom:16}}>
-              <span style={{fontSize:22}}>🔥</span>
-              <span style={{fontSize:22,fontWeight:800,color:"#f5a623"}}>{streak}</span>
-              <span style={{fontSize:13,color:"#c87d00",fontWeight:600}}>{streak===1?"day streak":"days in a row"}</span>
-            </div>
-          )}
-          <div style={{fontSize:15,color:"#888",lineHeight:1.7,marginBottom:8,whiteSpace:"pre-line"}}>
-            {selKey===today
-              ? "一日一日の積み重ねが\n大きな変化を生む。"
-              : "その日の自分を振り返れた。\nそれだけで十分。"}
-          </div>
-          <div style={{fontSize:13,color:"#bbb",marginBottom:36}}>
-            {selKey===today?"明日も全力で。":"記録は続いている。"}
-          </div>
-
-          {/* Habits summary */}
-          {(entry.habits||[]).length>0&&(
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",marginBottom:32}}>
-              {(entry.habits||[]).map(hid=>{
-                const h=allHabits.find(x=>x.id===hid);
-                return h?<span key={hid} style={{padding:"5px 12px",borderRadius:20,background:"#f5f5f5",color:"#555",fontSize:12,fontWeight:600}}>{h.emoji} {h.label}</span>:null;
-              })}
-            </div>
-          )}
-
-          <button onClick={()=>updJournal(selKey,{submitted:false})} style={{width:"100%",maxWidth:320,padding:"14px",background:"none",border:"1.5px solid #eee",borderRadius:12,color:"#888",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>
-            ✎ Edit today's entry
-          </button>
-          <button onClick={()=>setView("history")} style={{width:"100%",maxWidth:320,padding:"14px",background:"none",border:"none",color:"#bbb",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
-            View history
-          </button>
+      {filtered.length===0 && (
+        <div style={{ textAlign:"center", color:"#ccc", padding:"32px 0", fontSize:14 }}>
+          {period==="🏆" ? "No achievements yet 🏅" : "No goals for this period"}
         </div>
       )}
 
-      {view==="history"&&(
-        <>
-          {/* Month nav */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-            <button onClick={()=>shiftHistMonth(-1)} style={S.arrow}>‹</button>
-            <span style={{fontSize:14,fontWeight:700,color:"#111"}}>{MONTHS[calMonth]} {calYear}</span>
-            <button onClick={()=>shiftHistMonth(1)} style={S.arrow}>›</button>
-          </div>
-          {/* Day labels */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:"#fff",border:"1px solid #efefef",borderRadius:"14px 14px 0 0",borderBottom:"1px solid #f0f0f0"}}>
-            {DAYS_S.map((d,i)=>(
-              <div key={i} style={{textAlign:"center",fontSize:9,color:i===0?"#E03A3A":i===6?"#3A6FE0":"#bbb",padding:"6px 0",borderRight:i<6?"1px solid #f0f0f0":"none",fontWeight:i===0||i===6?600:400}}>{d}</div>
-            ))}
-          </div>
-          {/* Calendar grid */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:"#fff",border:"1px solid #efefef",borderTop:"none",borderRadius:"0 0 14px 14px",overflow:"hidden",marginBottom:14,boxShadow:BOX}}>
-            {histCells.map(({d,faded},i)=>{
-              const m2=faded?(i<firstDay?calMonth-1<0?11:calMonth-1:calMonth+1>11?0:calMonth+1):calMonth;
-              const y2=faded?(i<firstDay&&calMonth===0?calYear-1:!faded||i>=firstDay&&calMonth===11?calYear+1:calYear):calYear;
-              const key=`${faded?(i<firstDay?(calMonth===0?calYear-1:calYear):calMonth===11?calYear+1:calYear):calYear}-${p2(faded?(i<firstDay?(calMonth===0?12:calMonth):calMonth+1>11?1:calMonth+1):calMonth+1)}-${p2(d)}`;
-              const e=data.journal[key];
-              const hasEntry=e&&(e.text||e.photos?.length>0);
-              const mood=e&&MOODS.find(m=>m.l===e.mood);
-              const isToday=key===today;
-              const col=(i+1)%7;
-              return(
-                <button key={i} onClick={()=>{ if(!faded&&hasEntry) setDetailKey(key); else if(!faded){setSelKey(key);setView("write");}}} style={{
-                  minHeight:72, border:"none", padding:"4px 3px",
-                  borderRight:col!==0?"1px solid #f0f0f0":"none",
-                  borderBottom:"1px solid #f0f0f0",
-                  background:isToday?"#fafafa":"#fff",
-                  cursor:"pointer",
-                  display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2,
-                  opacity:faded?0.3:1
-                }}>
-                  <span style={{fontSize:10,fontWeight:isToday?800:400,color:isToday?"#111":"#666",lineHeight:1}}>{d}</span>
-                  {!faded&&e?.photos?.[0]&&(
-                    <div style={{width:"100%",paddingTop:"60%",position:"relative",borderRadius:3,overflow:"hidden"}}>
-                      <img src={e.photos[0]} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
-                    </div>
-                  )}
-                  {!faded&&!e?.photos?.[0]&&e?.text&&(
-                    <div style={{fontSize:8,color:"#aaa",textAlign:"left",width:"100%",overflow:"hidden",lineHeight:1.3,WebkitLineClamp:2,display:"-webkit-box",WebkitBoxOrient:"vertical"}}>{e.text}</div>
-                  )}
-                  {!faded&&mood&&<span style={{fontSize:10,alignSelf:"flex-start"}}>{mood.e}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* Detail modal */}
-      {detailKey&&detailEntry&&(
-        <Modal onClose={()=>setDetailKey(null)} title={parseKey(detailKey).toLocaleDateString("en-AU",{weekday:"short",month:"short",day:"numeric"})}>
-          {detailEntry.mood&&<div style={{fontSize:28,marginBottom:12}}>{MOODS.find(m=>m.l===detailEntry.mood)?.e}</div>}
-          {(detailEntry.habits||[]).length>0&&(
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
-              {detailEntry.habits.map(hid=>{ const h=DEFAULT_HABITS.find(x=>x.id===hid); return h?<span key={hid} style={{padding:"4px 10px",borderRadius:20,background:"#111",color:"#fff",fontSize:12,fontWeight:600}}>{h.emoji} {h.label}</span>:null; })}
-            </div>
-          )}
-          {detailEntry.text&&<div style={{fontSize:14,color:"#333",lineHeight:1.8,marginBottom:14,whiteSpace:"pre-wrap"}}>{detailEntry.text}</div>}
-          {detailEntry.photos?.length>0&&(
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:14}}>
-              {detailEntry.photos.map((src,i)=>(
-                <div key={i} style={{paddingTop:"100%",position:"relative"}}>
-                  <img src={src} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",borderRadius:8}}/>
-                </div>
+      {period!=="🏆" && (
+        showAdd ? (
+          <div style={{ marginTop:8, padding:14, background:"#f8f8f8", borderRadius:14 }}>
+            <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="Goal title"
+              style={{ width:"100%", fontSize:14, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none" }}
+            />
+            <textarea value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Notes (optional)"
+              style={{ width:"100%", fontSize:13, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", resize:"none", height:60, marginBottom:10, outline:"none", fontFamily:"inherit" }}
+            />
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              {GOAL_COLORS.map(c => (
+                <button key={c} onClick={() => setNewColor(c)} style={{ width:26, height:26, borderRadius:"50%", background:c, border:newColor===c?"3px solid #333":"2px solid transparent", cursor:"pointer" }} />
               ))}
             </div>
-          )}
-          <button onClick={()=>{setSelKey(detailKey);setView("write");setDetailKey(null);}} style={{width:"100%",padding:"13px",background:"#111",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Edit</button>
-        </Modal>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => setShowAdd(false)} style={{ flex:1, padding:"10px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
+              <button onClick={addGoal} style={{ flex:1, padding:"10px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Add Goal</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)} style={{ width:"100%", padding:"13px", background:"#000", color:"#fff", border:"none", borderRadius:14, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Goal</button>
+        )
       )}
     </div>
   );
 }
-
-// ── Modals ─────────────────────────────────────────────────
-function EventModal({ev,isNew,onSave,onDelete,onClose}){
-  const[form,setForm]=useState({title:"",date:todayKey(),time:"",endTime:"",color:EVENT_COLORS[0],note:"",...ev});
-  function save(){ if(!form.title.trim()) return; onSave(form); onClose(); }
-  return(
-    <Modal onClose={onClose} title={isNew?"New Event":"Edit Event"}>
-      <Field label="Title"><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Event name" style={S.input}/></Field>
-      <Field label="Date"><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={S.input}/></Field>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <Field label="Start"><input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))} style={S.input}/></Field>
-        <Field label="End"><input type="time" value={form.endTime} onChange={e=>setForm(f=>({...f,endTime:e.target.value}))} style={S.input}/></Field>
-      </div>
-      <Field label="Color">
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {EVENT_COLORS.map(c=><button key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:28,height:28,borderRadius:"50%",background:c,border:form.color===c?"3px solid #111":"3px solid transparent",cursor:"pointer"}}/>)}
-        </div>
-      </Field>
-      <Field label="Note"><input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Optional note" style={S.input}/></Field>
-      <ModalActions onSave={save} onDelete={onDelete} onClose={onClose}/>
-    </Modal>
-  );
-}
-
-function TaskModal({task,isNew,onSave,onDelete,onClose}){
-  const[form,setForm]=useState({title:"",cat:"personal",priority:"med",dueDate:"",note:"",...task});
-  function save(){ if(!form.title.trim()) return; onSave(form); onClose(); }
-  return(
-    <Modal onClose={onClose} title={isNew?"New Task":"Edit Task"}>
-      <Field label="Title"><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Task name" style={S.input}/></Field>
-      <Field label="Category">
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {TASK_CATS.map(c=><button key={c.id} onClick={()=>setForm(f=>({...f,cat:c.id}))} style={{padding:"5px 11px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",border:form.cat===c.id?`1.5px solid ${c.color}`:"1.5px solid #eee",background:form.cat===c.id?c.bg:"#fff",color:form.cat===c.id?c.color:"#bbb"}}>{c.label}</button>)}
-        </div>
-      </Field>
-      <Field label="Priority">
-        <div style={{display:"flex",gap:6}}>
-          {["high","med","low"].map(p=>{
-            const col=p==="high"?"#FF6B6B":p==="med"?"#F5A623":"#bbb";
-            return <button key={p} onClick={()=>setForm(f=>({...f,priority:p}))} style={{flex:1,padding:"7px",borderRadius:8,border:form.priority===p?`1.5px solid ${col}`:"1.5px solid #eee",background:form.priority===p?col+"18":"#fff",color:form.priority===p?col:"#bbb",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{p}</button>;
-          })}
-        </div>
-      </Field>
-      <Field label="Due Date"><input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={S.input}/></Field>
-      <Field label="Note"><input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Optional" style={S.input}/></Field>
-      <ModalActions onSave={save} onDelete={onDelete} onClose={onClose}/>
-    </Modal>
-  );
-}
-
-function GoalModal({goal,isNew,onSave,onDelete,onClose}){
-  const[form,setForm]=useState({title:"",period:"week",memo:"",color:"#5B6EF5",...goal});
-  function save(){ if(!form.title.trim()) return; onSave(form); onClose(); }
-  return(
-    <Modal onClose={onClose} title={isNew?"New Goal":"Edit Goal"}>
-      <Field label="Title"><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Goal name" style={S.input}/></Field>
-      <Field label="Period">
-        <div style={{display:"flex",gap:6}}>
-          {GOAL_PERIODS_NEW.map(p=><button key={p} onClick={()=>setForm(f=>({...f,period:p}))} style={{flex:1,padding:"7px",borderRadius:8,border:form.period===p?"1.5px solid #111":"1.5px solid #eee",background:form.period===p?"#111":"#fff",color:form.period===p?"#fff":"#bbb",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{p}</button>)}
-        </div>
-      </Field>
-      <Field label="Memo">
-        <textarea value={form.memo||""} onChange={e=>setForm(f=>({...f,memo:e.target.value}))} placeholder="Notes, details, why this matters..." rows={3}
-          style={{...S.input,resize:"none",lineHeight:1.6}}/>
-      </Field>
-      <Field label="Color">
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {EVENT_COLORS.map(c=><button key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:28,height:28,borderRadius:"50%",background:c,border:form.color===c?"3px solid #111":"3px solid transparent",cursor:"pointer"}}/>)}
-        </div>
-      </Field>
-      <ModalActions onSave={save} onDelete={onDelete} onClose={onClose}/>
-    </Modal>
-  );
-}
-
-// ── Shared UI ──────────────────────────────────────────────
-function Modal({onClose,title,children}){
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",alignItems:"flex-end",background:"rgba(0,0,0,0.4)"}} onClick={onClose}>
-      <div style={{background:"#fff",width:"100%",maxWidth:480,margin:"0 auto",borderRadius:"20px 20px 0 0",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"center",padding:"10px 0 0"}}><div style={{width:36,height:4,borderRadius:2,background:"#e0e0e0"}}/></div>
-        <div style={{padding:"14px 20px 44px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-            <span style={{fontSize:17,fontWeight:800,color:"#111"}}>{title}</span>
-            <button onClick={onClose} style={{background:"#f5f5f5",border:"none",borderRadius:"50%",width:28,height:28,fontSize:16,color:"#888",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-          </div>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-function ModalActions({onSave,onDelete,onClose}){
-  return(
-    <div style={{display:"flex",gap:8,marginTop:20}}>
-      <button onClick={onSave} style={{flex:1,padding:"13px",background:"#111",border:"none",borderRadius:12,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Save</button>
-      {onDelete&&<button onClick={onDelete} style={{padding:"13px 16px",background:"none",border:"1px solid #fce0e0",borderRadius:12,color:"#e08080",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>}
-    </div>
-  );
-}
-function Field({label,children}){ return <div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{label}</div>{children}</div>; }
-function IconBtn({onClick,children}){ return <button onClick={onClick} style={{width:30,height:30,borderRadius:"50%",background:"#111",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{children}</button>; }
-function Empty({text}){ return <div style={{textAlign:"center",color:"#ddd",fontSize:13,padding:"20px 0"}}>{text}</div>; }
-
-// ── Styles ─────────────────────────────────────────────────
-const BOX="0 1px 4px rgba(0,0,0,0.04)";
-const S={
-  page:{ background:"#f7f7f5", minHeight:"100vh", fontFamily:"'DM Sans','Helvetica Neue',Arial,sans-serif", width:"100%", maxWidth:"100%", margin:"0" },
-  content:{ paddingBottom:40 },
-  body:{ padding:"18px 20px 0" },
-  arrow:{ background:"none", border:"1px solid #eee", borderRadius:8, width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, color:"#888", cursor:"pointer", fontFamily:"inherit" },
-  input:{ width:"100%", padding:"10px 12px", border:"1px solid #eee", borderRadius:10, fontSize:14, color:"#111", fontFamily:"inherit", outline:"none", background:"#fafafa", boxSizing:"border-box" },
-  sectionLabel:{ fontSize:10, fontWeight:700, color:"#bbb", letterSpacing:1.5, textTransform:"uppercase", marginBottom:10 },
-};
