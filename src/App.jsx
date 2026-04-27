@@ -211,7 +211,7 @@ function CalendarSection({ events, setEvents }) {
                     background: e.color||"#222", color:"#fff",
                     fontSize:8, fontWeight:600, borderRadius:2,
                     padding:"0px 3px", lineHeight:"14px", overflow:"hidden",
-                    whiteSpace:"nowrap", textOverflow:"ellipsis"
+                    whiteSpace:"nowrap"
                   }}>{e.title}</div>
                 ))}
                 {dayEvents.length>3 && <div style={{ fontSize:8, color:"#999", paddingLeft:2 }}>+{dayEvents.length-3}</div>}
@@ -649,7 +649,6 @@ function BeRealCard({ date, entry, onClick }) {
           {entry.mood || "📝"}
         </div>
       )}
-      {/* Overlay */}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"30px 10px 10px", background:"linear-gradient(transparent,rgba(0,0,0,0.65))" }}>
         <div style={{ color:"#fff", fontSize:12, fontWeight:700 }}>{fmted}</div>
         {entry.mood && <div style={{ fontSize:18, lineHeight:1.2 }}>{entry.mood}</div>}
@@ -661,9 +660,6 @@ function BeRealCard({ date, entry, onClick }) {
           </div>
         )}
       </div>
-      {entry.submitted && (
-        <div style={{ position:"absolute", top:8, right:8, width:8, height:8, borderRadius:"50%", background:"#4CAF50" }} />
-      )}
     </div>
   );
 }
