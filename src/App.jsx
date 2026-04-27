@@ -276,38 +276,36 @@ function CalendarSection({ events, setEvents }) {
   const nextMonth = () => { if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1); };
 
   return (
-    <div style={{ padding:"0 20px" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingBottom:12 }}>
-        <button onClick={prevMonth} style={{ background:C.muted, border:"none", fontSize:16, cursor:"pointer", padding:"6px 10px", color:C.fg, borderRadius:10 }}>‹</button>
-        <span style={{ fontWeight:600, fontSize:15, color:C.fg }}>{MONTHS[month]} {year}</span>
-        <button onClick={nextMonth} style={{ background:C.muted, border:"none", fontSize:16, cursor:"pointer", padding:"6px 10px", color:C.fg, borderRadius:10 }}>›</button>
+    <div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px 10px" }}>
+        <button onClick={prevMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:C.fg }}>‹</button>
+        <span style={{ fontWeight:600, fontSize:16, color:C.fg }}>{MONTHS[month]} {year}</span>
+        <button onClick={nextMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:C.fg }}>›</button>
       </div>
-      <div style={{ ...card, padding:0, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${C.border}` }}>
-          {DAYS.map((d, i) => (
-            <div key={d} style={{ padding:"6px 0", textAlign:"center", fontSize:10, fontWeight:600, color:i===0?"#e53935":i===6?"#1565C0":C.mutedFg }}>{d}</div>
-          ))}
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
-          {cells.map((c, i) => {
-            const ds = getDateStr(c);
-            const dow = new Date(ds+"T00:00:00").getDay();
-            const isRed = dow===0||holidays.has(ds); const isBlue = dow===6;
-            const isToday = ds===tod; const isSel = ds===selectedDate;
-            const dayEvents = getEvents(ds);
-            const numColor = isRed?"#e53935":isBlue?"#1565C0":C.fg;
-            return (
-              <div key={i} onClick={() => handleCellClick(c)} style={{ background:isSel?C.muted:"#fff", height:62, overflow:"hidden", cursor:"pointer", position:"relative", opacity:c.current?1:0.3, borderBottom:`0.5px solid ${C.border}`, borderRight:`0.5px solid ${C.border}` }}>
-                <span style={{ position:"absolute", top:4, right:4, fontSize:11, fontWeight:isToday?700:400, color:isToday?"#fff":numColor, background:isToday?C.fg:"transparent", borderRadius:"50%", width:isToday?19:undefined, height:isToday?19:undefined, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>{c.day}</span>
-                <div style={{ position:"absolute", top:22, left:2, right:2, display:"flex", flexDirection:"column", gap:1 }}>
-                  {dayEvents.slice(0,3).map(e => (
-                    <div key={e.id} style={{ background:e.color||C.fg, color:"#fff", fontSize:7, fontWeight:600, borderRadius:2, padding:"0px 3px", lineHeight:"13px", overflow:"hidden", whiteSpace:"nowrap" }}>{e.title}</div>
-                  ))}
-                </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:C.muted, borderTop:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}` }}>
+        {DAYS.map((d, i) => (
+          <div key={d} style={{ padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:600, color:i===0?"#e53935":i===6?"#1565C0":C.mutedFg }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, background:C.border }}>
+        {cells.map((c, i) => {
+          const ds = getDateStr(c);
+          const dow = new Date(ds+"T00:00:00").getDay();
+          const isRed = dow===0||holidays.has(ds); const isBlue = dow===6;
+          const isToday = ds===tod; const isSel = ds===selectedDate;
+          const dayEvents = getEvents(ds);
+          const numColor = isRed?"#e53935":isBlue?"#1565C0":C.fg;
+          return (
+            <div key={i} onClick={() => handleCellClick(c)} style={{ background:isSel?C.muted:"#fff", height:66, overflow:"hidden", cursor:"pointer", position:"relative", opacity:c.current?1:0.3 }}>
+              <span style={{ position:"absolute", top:4, right:4, fontSize:12, fontWeight:isToday?700:400, color:isToday?"#fff":numColor, background:isToday?C.fg:"transparent", borderRadius:"50%", width:isToday?20:undefined, height:isToday?20:undefined, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>{c.day}</span>
+              <div style={{ position:"absolute", top:22, left:2, right:2, display:"flex", flexDirection:"column", gap:1 }}>
+                {dayEvents.slice(0,3).map(e => (
+                  <div key={e.id} style={{ background:e.color||C.fg, color:"#fff", fontSize:8, fontWeight:600, borderRadius:2, padding:"0px 3px", lineHeight:"14px", overflow:"hidden", whiteSpace:"nowrap" }}>{e.title}</div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
       {selectedDate && <EventModal date={selectedDate} events={events} setEvents={setEvents} onClose={() => setSelectedDate(null)} />}
     </div>
