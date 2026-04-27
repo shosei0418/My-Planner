@@ -19,6 +19,22 @@ const GRADIENTS = [
 const REPEAT_OPTIONS = ["none","daily","weekly"];
 const REPEAT_LABELS = { none:"None", daily:"Every day", weekly:"Every week" };
 
+// ── Design tokens (from Figma) ─────────────────────────────────────────────
+const C = {
+  fg:       "#030213",
+  muted:    "#ececf0",
+  mutedFg:  "#717182",
+  border:   "rgba(0,0,0,0.08)",
+  inputBg:  "#f3f3f5",
+  accent:   "#e9ebef",
+};
+const card = { background:"#fff", borderRadius:16, padding:16, border:`1px solid ${C.border}`, boxShadow:"0 1px 4px rgba(0,0,0,0.05)" };
+const Check = ({ done, color }) => (
+  <div style={{ width:22, height:22, borderRadius:"50%", border:`2px solid ${done?(color||C.fg):C.mutedFg}`, background:done?(color||C.fg):"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.15s" }}>
+    {done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>}
+  </div>
+);
+
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -117,14 +133,16 @@ export default function App() {
 // ── Top Nav ────────────────────────────────────────────────────────────────
 function TopNav({ tab, setTab }) {
   return (
-    <div style={{ padding:"14px 16px 10px", background:"#fff", borderBottom:"1px solid #f0f0f0" }}>
-      <div style={{ display:"flex", gap:6, background:"#f2f2f2", borderRadius:100, padding:4 }}>
+    <div style={{ padding:"14px 20px 10px", background:"#fff", borderBottom:`1px solid ${C.border}` }}>
+      <div style={{ display:"flex", gap:4, background:C.muted, borderRadius:14, padding:4 }}>
         {["Home","Diary","Goals"].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
-            flex:1, padding:"8px 0", borderRadius:100, border:"none", cursor:"pointer",
-            background: tab===t ? "#000" : "transparent",
-            color: tab===t ? "#fff" : "#888",
-            fontSize:14, fontWeight: tab===t ? 600 : 400, transition:"all 0.2s"
+            flex:1, padding:"8px 0", borderRadius:10, border:"none", cursor:"pointer",
+            background: tab===t ? "#fff" : "transparent",
+            color: tab===t ? C.fg : C.mutedFg,
+            fontSize:14, fontWeight: tab===t ? 600 : 400,
+            boxShadow: tab===t ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+            transition:"all 0.2s"
           }}>{t}</button>
         ))}
       </div>
@@ -147,24 +165,13 @@ function HomeTab({ events, setEvents, tasks, setTasks, diary, habits, completedT
 
 // ── Score Dashboard ────────────────────────────────────────────────────────
 function ScoreDashboard({ diary, habits, completedTasks, onWeeklyReview }) {
-  const today = todayStr();
-  const todayEntry = diary[today] || {};
-  const checkedHabits = todayEntry.habits || [];
-  const diaryDone = !!todayEntry.submitted;
-  const todayCompleted = completedTasks.filter(t => t.completedDate === today).length;
   const now = new Date();
   const dayName = DAYS[now.getDay()];
   const dateLabel = `${now.getDate()} ${MONTHS_SHORT[now.getMonth()]}`;
-
   return (
-    <div style={{ padding:"16px 16px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-      <div>
-        <div style={{ fontSize:22, fontWeight:700, letterSpacing:-0.5 }}>{dayName}, {dateLabel}</div>
-        <div style={{ fontSize:13, color:"#aaa", marginTop:2 }}>
-          {diaryDone ? "📓 Done" : "📓 Pending"} · {checkedHabits.length}/{habits.length} habits · {todayCompleted} tasks done
-        </div>
-      </div>
-      <button onClick={onWeeklyReview} style={{ background:"#f0f0f0", border:"none", borderRadius:20, padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer", color:"#555", flexShrink:0 }}>
+    <div style={{ padding:"16px 20px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <div style={{ fontSize:22, fontWeight:600, letterSpacing:-0.3, color:C.fg }}>{dayName}, {dateLabel}</div>
+      <button onClick={onWeeklyReview} style={{ background:C.muted, border:"none", borderRadius:20, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", color:C.fg }}>
         Weekly Review
       </button>
     </div>
@@ -264,48 +271,43 @@ function CalendarSection({ events, setEvents }) {
   const getDateStr = c => `${c.year}-${String(c.month+1).padStart(2,"0")}-${String(c.day).padStart(2,"0")}`;
   const getEvents = ds => events.filter(e => e.date===ds);
   const tod = todayStr();
-  const handleCellClick = c => {
-    const ds = getDateStr(c);
-    if (!c.current) { setYear(c.year); setMonth(c.month); }
-    setSelectedDate(ds);
-  };
+  const handleCellClick = c => { const ds=getDateStr(c); if(!c.current){setYear(c.year);setMonth(c.month);} setSelectedDate(ds); };
   const prevMonth = () => { if(month===0){setYear(y=>y-1);setMonth(11);}else setMonth(m=>m-1); };
   const nextMonth = () => { if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1); };
 
   return (
-    <div>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 16px 10px" }}>
-        <button onClick={prevMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:"#333" }}>‹</button>
-        <span style={{ fontWeight:700, fontSize:17 }}>{MONTHS[month]} {year}</span>
-        <button onClick={nextMonth} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", padding:"4px 8px", color:"#333" }}>›</button>
+    <div style={{ padding:"0 20px" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingBottom:12 }}>
+        <button onClick={prevMonth} style={{ background:C.muted, border:"none", fontSize:16, cursor:"pointer", padding:"6px 10px", color:C.fg, borderRadius:10 }}>‹</button>
+        <span style={{ fontWeight:600, fontSize:15, color:C.fg }}>{MONTHS[month]} {year}</span>
+        <button onClick={nextMonth} style={{ background:C.muted, border:"none", fontSize:16, cursor:"pointer", padding:"6px 10px", color:C.fg, borderRadius:10 }}>›</button>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:"#f8f8f8", borderTop:"1px solid #eee", borderBottom:"1px solid #eee" }}>
-        {DAYS.map((d, i) => (
-          <div key={d} style={{ padding:"6px 0", textAlign:"center", fontSize:11, fontWeight:600, color: i===0?"#e53935":i===6?"#1565C0":"#888" }}>{d}</div>
-        ))}
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, background:"#eee" }}>
-        {cells.map((c, i) => {
-          const ds = getDateStr(c);
-          const dow = new Date(ds+"T00:00:00").getDay();
-          const isRed = dow===0 || holidays.has(ds);
-          const isBlue = dow===6;
-          const isToday = ds===tod;
-          const isSel = ds===selectedDate;
-          const dayEvents = getEvents(ds);
-          const numColor = isRed?"#e53935":isBlue?"#1565C0":"#222";
-          return (
-            <div key={i} onClick={() => handleCellClick(c)} style={{ background: isSel?"#f5f5f5":"#fff", height:68, overflow:"hidden", cursor:"pointer", position:"relative", opacity: c.current?1:0.3, boxSizing:"border-box" }}>
-              <span style={{ position:"absolute", top:4, right:5, fontSize:12, fontWeight: isToday?700:400, color: isToday?"#fff":numColor, background: isToday?"#000":"transparent", borderRadius:"50%", width:isToday?20:undefined, height:isToday?20:undefined, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>{c.day}</span>
-              <div style={{ position:"absolute", top:22, left:2, right:2, display:"flex", flexDirection:"column", gap:1 }}>
-                {dayEvents.slice(0,3).map(e => (
-                  <div key={e.id} style={{ background: e.color||"#222", color:"#fff", fontSize:8, fontWeight:600, borderRadius:2, padding:"0px 3px", lineHeight:"14px", overflow:"hidden", whiteSpace:"nowrap" }}>{e.title}</div>
-                ))}
-                {dayEvents.length>3 && <div style={{ fontSize:8, color:"#999", paddingLeft:2 }}>+{dayEvents.length-3}</div>}
+      <div style={{ ...card, padding:0, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${C.border}` }}>
+          {DAYS.map((d, i) => (
+            <div key={d} style={{ padding:"6px 0", textAlign:"center", fontSize:10, fontWeight:600, color:i===0?"#e53935":i===6?"#1565C0":C.mutedFg }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
+          {cells.map((c, i) => {
+            const ds = getDateStr(c);
+            const dow = new Date(ds+"T00:00:00").getDay();
+            const isRed = dow===0||holidays.has(ds); const isBlue = dow===6;
+            const isToday = ds===tod; const isSel = ds===selectedDate;
+            const dayEvents = getEvents(ds);
+            const numColor = isRed?"#e53935":isBlue?"#1565C0":C.fg;
+            return (
+              <div key={i} onClick={() => handleCellClick(c)} style={{ background:isSel?C.muted:"#fff", height:62, overflow:"hidden", cursor:"pointer", position:"relative", opacity:c.current?1:0.3, borderBottom:`0.5px solid ${C.border}`, borderRight:`0.5px solid ${C.border}` }}>
+                <span style={{ position:"absolute", top:4, right:4, fontSize:11, fontWeight:isToday?700:400, color:isToday?"#fff":numColor, background:isToday?C.fg:"transparent", borderRadius:"50%", width:isToday?19:undefined, height:isToday?19:undefined, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>{c.day}</span>
+                <div style={{ position:"absolute", top:22, left:2, right:2, display:"flex", flexDirection:"column", gap:1 }}>
+                  {dayEvents.slice(0,3).map(e => (
+                    <div key={e.id} style={{ background:e.color||C.fg, color:"#fff", fontSize:7, fontWeight:600, borderRadius:2, padding:"0px 3px", lineHeight:"13px", overflow:"hidden", whiteSpace:"nowrap" }}>{e.title}</div>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
       {selectedDate && <EventModal date={selectedDate} events={events} setEvents={setEvents} onClose={() => setSelectedDate(null)} />}
     </div>
@@ -329,43 +331,43 @@ function EventModal({ date, events, setEvents, onClose }) {
   const startEdit = e => { setEditId(e.id);setTitle(e.title);setTime(e.time||"");setColor(e.color||"#222");setAdding(true); };
   const del = id => setEvents(evs => evs.filter(e => e.id!==id));
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"flex-end", zIndex:100 }} onClick={onClose}>
-      <div style={{ background:"#fff", borderRadius:"20px 20px 0 0", width:"100%", padding:"20px 16px 40px", maxHeight:"80vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <span style={{ fontWeight:700, fontSize:16 }}>{fmted}</span>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:"#333" }}>×</button>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", display:"flex", alignItems:"flex-end", zIndex:100 }} onClick={onClose}>
+      <div style={{ background:"#fff", borderRadius:"22px 22px 0 0", width:"100%", padding:"22px 20px 44px", maxHeight:"80vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <span style={{ fontWeight:600, fontSize:17, color:C.fg }}>{fmted}</span>
+          <button onClick={onClose} style={{ background:C.muted, border:"none", fontSize:16, cursor:"pointer", color:C.fg, width:30, height:30, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
         {dayEvents.map(e => (
-          <div key={e.id} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, padding:"10px 12px", background:"#f8f8f8", borderRadius:12 }}>
-            <div style={{ width:10, height:10, borderRadius:"50%", background:e.color||"#222", flexShrink:0 }} />
+          <div key={e.id} style={{ ...card, display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+            <div style={{ width:10, height:10, borderRadius:"50%", background:e.color||C.fg, flexShrink:0 }} />
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:600 }}>{e.title}</div>
-              {e.time && <div style={{ fontSize:12, color:"#999" }}>{e.time}</div>}
+              <div style={{ fontSize:14, fontWeight:600, color:C.fg }}>{e.title}</div>
+              {e.time && <div style={{ fontSize:12, color:C.mutedFg }}>{e.time}</div>}
             </div>
-            <button onClick={() => startEdit(e)} style={{ background:"none", border:"none", fontSize:15, cursor:"pointer", color:"#666" }}>✎</button>
-            <button onClick={() => del(e.id)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#ccc" }}>×</button>
+            <button onClick={() => startEdit(e)} style={{ background:"none", border:"none", fontSize:15, cursor:"pointer", color:C.mutedFg }}>✎</button>
+            <button onClick={() => del(e.id)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:C.mutedFg }}>×</button>
           </div>
         ))}
         {adding ? (
           <div style={{ marginTop:8 }}>
             <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Event title"
-              style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:12, marginBottom:8, boxSizing:"border-box", outline:"none" }}
+              style={{ width:"100%", fontSize:16, padding:"12px 14px", border:"none", borderRadius:12, marginBottom:8, boxSizing:"border-box", outline:"none", background:C.inputBg }}
             />
             <input value={time} onChange={e=>setTime(e.target.value)} type="time"
-              style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:12, marginBottom:8, boxSizing:"border-box", outline:"none" }}
+              style={{ width:"100%", fontSize:16, padding:"12px 14px", border:"none", borderRadius:12, marginBottom:10, boxSizing:"border-box", outline:"none", background:C.inputBg }}
             />
-            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+            <div style={{ display:"flex", gap:8, marginBottom:14 }}>
               {EVENT_COLORS.map(c => (
-                <button key={c} onClick={() => setColor(c)} style={{ width:26, height:26, borderRadius:"50%", background:c, border:color===c?"3px solid #333":"2px solid transparent", cursor:"pointer" }} />
+                <button key={c} onClick={() => setColor(c)} style={{ width:28, height:28, borderRadius:"50%", background:c, border:color===c?"3px solid #333":"2px solid transparent", cursor:"pointer" }} />
               ))}
             </div>
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => {setAdding(false);setEditId(null);setTitle("");setTime("");}} style={{ flex:1, padding:"11px", background:"#f0f0f0", border:"none", borderRadius:12, fontSize:14, cursor:"pointer" }}>Cancel</button>
-              <button onClick={saveEvent} style={{ flex:1, padding:"11px", background:"#000", color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer" }}>Save</button>
+              <button onClick={() => {setAdding(false);setEditId(null);setTitle("");setTime("");}} style={{ flex:1, padding:"12px", background:C.muted, border:"none", borderRadius:12, fontSize:14, cursor:"pointer", color:C.fg }}>Cancel</button>
+              <button onClick={saveEvent} style={{ flex:1, padding:"12px", background:C.fg, color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer" }}>Save</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setAdding(true)} style={{ width:"100%", padding:"12px", background:"#000", color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Event</button>
+          <button onClick={() => setAdding(true)} style={{ width:"100%", padding:"13px", background:C.fg, color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Event</button>
         )}
       </div>
     </div>
@@ -419,54 +421,56 @@ function TaskSection({ tasks, setTasks, completedTasks, setCompletedTasks }) {
   const inStyle = { width:"100%", fontSize:16, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit" };
 
   return (
-    <div style={{ padding:"0 16px 16px" }}>
+    <div style={{ padding:"0 20px 16px" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <span style={{ fontWeight:700, fontSize:15 }}>Tasks</span>
-        <button onClick={() => setAdding(a=>!a)} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 14px", fontSize:13, cursor:"pointer" }}>+ Add</button>
+        <span style={{ fontWeight:600, fontSize:17, color:C.fg }}>Tasks</span>
+        <button onClick={() => setAdding(a=>!a)} style={{ width:32, height:32, borderRadius:"50%", background:C.fg, color:"#fff", border:"none", cursor:"pointer", fontSize:20, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>+</button>
       </div>
       {adding && (
-        <div style={{ marginBottom:12, padding:12, background:"#f8f8f8", borderRadius:14 }}>
-          <input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Task title" style={inStyle} onKeyDown={e=>e.key==="Enter"&&addTask()} autoFocus />
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-            <span style={{ fontSize:12, color:"#aaa", whiteSpace:"nowrap" }}>📅 Due</span>
-            <input value={newDeadline} onChange={e=>setNewDeadline(e.target.value)} type="date" style={{ flex:1, fontSize:14, padding:"6px 8px", border:"1px solid #e0e0e0", borderRadius:8, outline:"none" }} />
+        <div style={{ ...card, marginBottom:12 }}>
+          <input value={newTask} onChange={e=>setNewTask(e.target.value)} placeholder="Add new task..." style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"none", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit", background:C.inputBg }} onKeyDown={e=>e.key==="Enter"&&addTask()} autoFocus />
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.inputBg, borderRadius:10, padding:"8px 12px" }}>
+            <span style={{ fontSize:13, color:C.mutedFg, whiteSpace:"nowrap" }}>📅 Due</span>
+            <input value={newDeadline} onChange={e=>setNewDeadline(e.target.value)} type="date" style={{ flex:1, fontSize:14, border:"none", outline:"none", background:"transparent" }} />
           </div>
-          <input value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Memo (optional)" style={{ ...inStyle, marginBottom:10 }} />
+          <input value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Memo (optional)" style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"none", borderRadius:10, boxSizing:"border-box", marginBottom:10, outline:"none", fontFamily:"inherit", background:C.inputBg }} />
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setAdding(false)} style={{ flex:1, padding:"9px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
-            <button onClick={addTask} style={{ flex:1, padding:"9px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Add</button>
+            <button onClick={()=>setAdding(false)} style={{ flex:1, padding:"10px", background:C.muted, border:"none", borderRadius:10, cursor:"pointer", fontSize:14, color:C.fg, fontWeight:500 }}>Cancel</button>
+            <button onClick={addTask} style={{ flex:1, padding:"10px", background:C.fg, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add</button>
           </div>
         </div>
       )}
       {tasks.map((t, i) => (
         editId===t.id ? (
-          <div key={t.id} style={{ marginBottom:8, padding:12, background:"#f8f8f8", borderRadius:12 }}>
-            <input value={editText} onChange={e=>setEditText(e.target.value)} style={inStyle} />
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-              <span style={{ fontSize:12, color:"#aaa", whiteSpace:"nowrap" }}>📅 Due</span>
-              <input value={editDeadline} onChange={e=>setEditDeadline(e.target.value)} type="date" style={{ flex:1, fontSize:14, padding:"6px 8px", border:"1px solid #e0e0e0", borderRadius:8, outline:"none" }} />
+          <div key={t.id} style={{ ...card, marginBottom:8 }}>
+            <input value={editText} onChange={e=>setEditText(e.target.value)} style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"none", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none", fontFamily:"inherit", background:C.inputBg }} />
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:C.inputBg, borderRadius:10, padding:"8px 12px" }}>
+              <span style={{ fontSize:13, color:C.mutedFg, whiteSpace:"nowrap" }}>📅 Due</span>
+              <input value={editDeadline} onChange={e=>setEditDeadline(e.target.value)} type="date" style={{ flex:1, fontSize:14, border:"none", outline:"none", background:"transparent" }} />
             </div>
-            <input value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Memo..." style={{ ...inStyle, marginBottom:10 }} />
+            <input value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Memo..." style={{ width:"100%", fontSize:16, padding:"10px 12px", border:"none", borderRadius:10, boxSizing:"border-box", marginBottom:10, outline:"none", fontFamily:"inherit", background:C.inputBg }} />
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"7px", background:"#e8e8e8", border:"none", borderRadius:8, cursor:"pointer", fontSize:12 }}>Cancel</button>
-              <button onClick={saveEdit} style={{ flex:1, padding:"7px", background:"#000", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:600 }}>Save</button>
+              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"9px", background:C.muted, border:"none", borderRadius:10, cursor:"pointer", fontSize:13, color:C.fg }}>Cancel</button>
+              <button onClick={saveEdit} style={{ flex:1, padding:"9px", background:C.fg, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Save</button>
             </div>
           </div>
         ) : (
           <div key={t.id} data-taskidx={i} onTouchStart={e=>handleTouchStart(e,i)} onTouchEnd={handleTouchEnd}
-            style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8, padding:"11px 12px", background:"#f8f8f8", borderRadius:12, userSelect:"none" }}>
-            <button onClick={() => check(t)} style={{ width:20, height:20, borderRadius:"50%", border:"2px solid #ccc", background:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
+            style={{ ...card, display:"flex", alignItems:"flex-start", gap:12, marginBottom:8, userSelect:"none" }}>
+            <button onClick={() => check(t)} style={{ background:"none", border:"none", padding:0, cursor:"pointer", marginTop:1, flexShrink:0 }}>
+              <Check done={false} />
+            </button>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:500 }}>{t.title}</div>
-              {t.deadline && <div style={{ fontSize:11, color:"#999", marginTop:2 }}>📅 {t.deadline}</div>}
-              {t.memo && <div style={{ fontSize:12, color:"#aaa", marginTop:2 }}>{t.memo}</div>}
+              <div style={{ fontSize:15, fontWeight:500, color:C.fg }}>{t.title}</div>
+              {t.deadline && <div style={{ fontSize:12, color:C.mutedFg, marginTop:3 }}>📅 {t.deadline}</div>}
+              {t.memo && <div style={{ fontSize:13, color:C.mutedFg, marginTop:2 }}>{t.memo}</div>}
             </div>
-            <button onClick={() => startEdit(t)} style={{ background:"none", border:"none", cursor:"pointer", color:"#bbb", fontSize:14, padding:4 }}>✎</button>
+            <button onClick={() => startEdit(t)} style={{ background:"none", border:"none", cursor:"pointer", color:C.mutedFg, fontSize:15, padding:4 }}>✎</button>
           </div>
         )
       ))}
       {tasks.length===0 && !adding && (
-        <div style={{ textAlign:"center", color:"#ccc", fontSize:14, padding:"24px 0" }}>No tasks yet</div>
+        <div style={{ textAlign:"center", color:C.mutedFg, fontSize:14, padding:"28px 0" }}>No tasks yet</div>
       )}
     </div>
   );
@@ -563,54 +567,68 @@ function DiaryWrite({ diary, setDiary, habits, setHabits, date: dateProp, onBack
           <span style={{ fontSize:13, fontWeight:600, color:"#888" }}>{fmtedDate}</span>
         </div>
       )}
-      <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>MOOD</div>
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:C.mutedFg, letterSpacing:0.5, marginBottom:8 }}>MOOD</div>
         <div style={{ display:"flex", gap:6 }}>
           {MOOD_OPTIONS.map(m => (
-            <button key={m} onClick={() => update({mood:m})} style={{ fontSize:26, background:mood===m?"#f0f0f0":"transparent", border:"none", borderRadius:10, padding:"6px 8px", cursor:"pointer", opacity:mood&&mood!==m?0.35:1, transition:"all 0.15s" }}>{m}</button>
+            <button key={m} onClick={() => update({mood:m})} style={{
+              width:42, height:42, borderRadius:"50%", border:"none", cursor:"pointer",
+              background: mood===m ? C.fg : C.muted,
+              fontSize:20, transition:"all 0.15s", transform: mood===m ? "scale(0.92)" : "scale(1)"
+            }}>{m}</button>
           ))}
         </div>
       </div>
       <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>HABITS</div>
+        <div style={{ fontSize:12, fontWeight:600, color:C.mutedFg, letterSpacing:0.5, marginBottom:8 }}>HABITS</div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-          {habits.map(h => (
-            <button key={h} onClick={() => toggleHabit(h)} style={{ padding:"6px 14px", borderRadius:20, border:"1.5px solid", borderColor:checkedHabits.includes(h)?"#000":"#e0e0e0", background:checkedHabits.includes(h)?"#000":"#fff", color:checkedHabits.includes(h)?"#fff":"#666", fontSize:13, cursor:"pointer" }}>{h}</button>
-          ))}
+          {habits.map(h => {
+            const on = checkedHabits.includes(h);
+            return (
+              <button key={h} onClick={() => toggleHabit(h)} style={{
+                padding:"5px 12px", borderRadius:20, border:"1.5px solid",
+                borderColor: on ? C.fg : C.border,
+                background: on ? C.fg : "transparent",
+                color: on ? "#fff" : C.mutedFg,
+                fontSize:13, cursor:"pointer", transition:"all 0.15s",
+                textDecoration: on ? "line-through" : "none"
+              }}>{h}</button>
+            );
+          })}
           {addingHabit ? (
-            <div style={{ display:"flex", gap:4 }}>
+            <div style={{ display:"flex", gap:6 }}>
               <input value={newHabit} onChange={e=>setNewHabit(e.target.value)} placeholder="Habit name"
-                style={{ fontSize:16, padding:"5px 10px", border:"1px solid #e0e0e0", borderRadius:20, outline:"none", width:110 }}
+                style={{ fontSize:16, padding:"5px 10px", border:`1px solid ${C.border}`, borderRadius:20, outline:"none", background:C.inputBg, width:110, fontFamily:"inherit" }}
                 onKeyDown={e=>e.key==="Enter"&&addHabit()} autoFocus />
-              <button onClick={addHabit} style={{ background:"#000", color:"#fff", border:"none", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontSize:12 }}>+</button>
+              <button onClick={addHabit} style={{ background:C.fg, color:"#fff", border:"none", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontSize:13 }}>+</button>
             </div>
           ) : (
-            <button onClick={() => setAddingHabit(true)} style={{ padding:"6px 14px", borderRadius:20, border:"1.5px dashed #ccc", background:"transparent", color:"#aaa", fontSize:13, cursor:"pointer" }}>+ Add</button>
+            <button onClick={() => setAddingHabit(true)} style={{ padding:"5px 12px", borderRadius:20, border:`1.5px dashed ${C.border}`, background:"transparent", color:C.mutedFg, fontSize:13, cursor:"pointer" }}>+ Add</button>
           )}
         </div>
       </div>
-      <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>TODAY</div>
-        <textarea value={text} onChange={e=>update({text:e.target.value})} placeholder="Write about your day..."
-          style={{ width:"100%", minHeight:130, fontSize:16, padding:"12px", border:"1.5px solid #ebebeb", borderRadius:14, resize:"none", outline:"none", boxSizing:"border-box", lineHeight:1.6, fontFamily:"inherit" }} />
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:C.mutedFg, letterSpacing:0.5, marginBottom:10 }}>TODAY</div>
+        <textarea value={text} onChange={e=>update({text:e.target.value})} placeholder="What's on your mind today?"
+          style={{ width:"100%", minHeight:130, fontSize:16, padding:"14px", border:"none", borderRadius:14, resize:"none", outline:"none", boxSizing:"border-box", lineHeight:1.6, fontFamily:"inherit", background:C.inputBg, color:C.fg }} />
       </div>
       <div style={{ marginBottom:24 }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"#aaa", letterSpacing:1, marginBottom:8 }}>PHOTOS</div>
+        <div style={{ fontSize:13, fontWeight:600, color:C.mutedFg, letterSpacing:0.5, marginBottom:10 }}>PHOTOS</div>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {photos.map((p, i) => (
             <div key={i} style={{ position:"relative" }}>
-              <img src={getPhotoSrc(p)} alt="" style={{ width:"100%", maxHeight:200, objectFit:"cover", borderRadius:12 }} />
-              <button onClick={() => removePhoto(i)} style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.5)", color:"#fff", border:"none", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:12 }}>×</button>
+              <img src={getPhotoSrc(p)} alt="" style={{ width:"100%", maxHeight:220, objectFit:"cover", borderRadius:14 }} />
+              <button onClick={() => removePhoto(i)} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.55)", color:"#fff", border:"none", borderRadius:"50%", width:24, height:24, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
             </div>
           ))}
-          <label style={{ width:80, height:80, border:"1.5px dashed #ddd", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#ccc", fontSize:26 }}>
+          <label style={{ width:80, height:80, border:`1.5px dashed ${C.border}`, borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:C.mutedFg, fontSize:26, background:C.muted }}>
             +<input type="file" accept="image/*" onChange={addPhoto} style={{ display:"none" }} />
           </label>
         </div>
       </div>
       {isToday
-        ? <button onClick={submit} style={{ width:"100%", padding:"14px", background:"#000", color:"#fff", border:"none", borderRadius:14, fontSize:15, fontWeight:700, cursor:"pointer" }}>Submit ✓</button>
-        : <button onClick={onBackToToday} style={{ width:"100%", padding:"14px", background:"#f0f0f0", color:"#333", border:"none", borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}>← Back</button>
+        ? <button onClick={submit} style={{ width:"100%", padding:"15px", background:C.fg, color:"#fff", border:"none", borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}>Save Entry</button>
+        : <button onClick={onBackToToday} style={{ width:"100%", padding:"15px", background:C.muted, color:C.fg, border:"none", borderRadius:14, fontSize:15, fontWeight:500, cursor:"pointer" }}>← Back</button>
       }
     </div>
   );
@@ -802,64 +820,186 @@ function GoalsTab({ goals, setGoals }) {
   const [newTitle, setNewTitle] = useState("");
   const [newColor, setNewColor] = useState(GOAL_COLORS[0]);
   const [newMemo, setNewMemo] = useState("");
+  const [newTarget, setNewTarget] = useState("");
+  const [newCurrent, setNewCurrent] = useState("0");
   const [editId, setEditId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editMemo, setEditMemo] = useState("");
-  const filtered = period==="🏆" ? goals.filter(g => g.achieved) : goals.filter(g => g.period===period && !g.achieved);
+  const [editCurrent, setEditCurrent] = useState("");
+  const [editTarget, setEditTarget] = useState("");
+
+  const [showAchieved, setShowAchieved] = useState(false);
+
+  const filtered = showAchieved
+    ? goals.filter(g => g.achieved)
+    : goals.filter(g => g.period===period && !g.achieved);
+
+  const avgProgress = (!showAchieved && filtered.length > 0)
+    ? Math.round(filtered.reduce((sum, g) => {
+        const p = g.target > 0 ? Math.min(100, Math.round((g.current||0)/g.target*100)) : (g.achieved?100:0);
+        return sum + p;
+      }, 0) / filtered.length)
+    : 0;
+  const completedCount = (!showAchieved && filtered.length > 0) ? filtered.filter(g => g.achieved || (g.target > 0 && (g.current||0) >= g.target)).length : 0;
+
   const addGoal = () => {
     if (!newTitle.trim()) return;
-    setGoals(gs => [...gs, {id:Date.now(), title:newTitle.trim(), color:newColor, memo:newMemo, period, achieved:false}]);
-    setNewTitle(""); setNewMemo(""); setShowAdd(false);
+    setGoals(gs => [...gs, {
+      id:Date.now(), title:newTitle.trim(), color:newColor,
+      memo:newMemo, period, achieved:false,
+      target: parseFloat(newTarget)||0, current: parseFloat(newCurrent)||0
+    }]);
+    setNewTitle(""); setNewMemo(""); setNewTarget(""); setNewCurrent("0"); setShowAdd(false);
   };
+
   const toggle = id => setGoals(gs => gs.map(g => g.id===id ? {...g, achieved:!g.achieved} : g));
   const del = id => setGoals(gs => gs.filter(g => g.id!==id));
-  const startEdit = g => { setEditId(g.id); setEditTitle(g.title); setEditMemo(g.memo||""); };
-  const saveEdit = () => { setGoals(gs => gs.map(g => g.id===editId ? {...g, title:editTitle, memo:editMemo} : g)); setEditId(null); };
+  const startEdit = g => { setEditId(g.id); setEditTitle(g.title); setEditMemo(g.memo||""); setEditCurrent(String(g.current||0)); setEditTarget(String(g.target||"")); };
+  const saveEdit = () => {
+    setGoals(gs => gs.map(g => g.id===editId ? {...g, title:editTitle, memo:editMemo, current:parseFloat(editCurrent)||0, target:parseFloat(editTarget)||0} : g));
+    setEditId(null);
+  };
+
+  const getProgress = g => g.target > 0 ? Math.min(100, Math.round(((g.current||0)/g.target)*100)) : (g.achieved?100:0);
+  const inNum = { fontSize:16, padding:"9px 12px", border:"none", borderRadius:10, outline:"none", background:C.inputBg, width:"100%", boxSizing:"border-box", fontFamily:"inherit" };
+
   return (
-    <div style={{ padding:"16px 16px 80px" }}>
-      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
-        {["Month","Year","🏆"].map(p => (
-          <button key={p} onClick={() => setPeriod(p)} style={{ flex:1, padding:"8px", borderRadius:20, border:"none", cursor:"pointer", background:period===p?"#000":"#f0f0f0", color:period===p?"#fff":"#666", fontSize:p==="🏆"?18:14, fontWeight:period===p?600:400 }}>{p}</button>
-        ))}
+    <div style={{ padding:"20px 20px 80px" }}>
+      {/* Period Toggle + Trophy button */}
+      <div style={{ display:"flex", gap:8, marginBottom:16, alignItems:"center" }}>
+        <div style={{ flex:1, display:"flex", gap:4, background:C.muted, borderRadius:14, padding:4 }}>
+          {["Month","Year"].map(p => (
+            <button key={p} onClick={() => { setPeriod(p); setShowAchieved(false); }} style={{ flex:1, padding:"8px", borderRadius:10, border:"none", cursor:"pointer", background:(!showAchieved&&period===p)?"#fff":"transparent", color:(!showAchieved&&period===p)?C.fg:C.mutedFg, fontSize:14, fontWeight:(!showAchieved&&period===p)?600:400, boxShadow:(!showAchieved&&period===p)?"0 1px 3px rgba(0,0,0,0.1)":"none", transition:"all 0.2s" }}>{p}</button>
+          ))}
+        </div>
+        <button onClick={() => setShowAchieved(a=>!a)} style={{ width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer", background:showAchieved?C.fg:C.muted, fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all 0.2s" }}>🏆</button>
       </div>
-      {filtered.map(g => (
-        editId===g.id ? (
-          <div key={g.id} style={{ marginBottom:10, padding:14, background:"#f8f8f8", borderRadius:14 }}>
-            <input value={editTitle} onChange={e=>setEditTitle(e.target.value)} style={{ width:"100%", fontSize:14, padding:"8px 10px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none" }} />
-            <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Notes..." style={{ width:"100%", fontSize:13, padding:"8px 10px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", resize:"none", height:60, outline:"none", fontFamily:"inherit" }} />
-            <div style={{ display:"flex", gap:8, marginTop:8 }}>
-              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"8px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
-              <button onClick={saveEdit} style={{ flex:1, padding:"8px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Save</button>
+
+      {/* Stats Overview Card */}
+      {!showAchieved && filtered.length > 0 && (
+        <div style={{ ...card, display:"flex", justifyContent:"space-between", marginBottom:20 }}>
+          <div style={{ textAlign:"center", flex:1 }}>
+            <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Total</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C.fg }}>{filtered.length}</div>
+          </div>
+          <div style={{ width:1, background:C.border }} />
+          <div style={{ textAlign:"center", flex:1 }}>
+            <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Avg Progress</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C.fg }}>{avgProgress}%</div>
+          </div>
+          <div style={{ width:1, background:C.border }} />
+          <div style={{ textAlign:"center", flex:1 }}>
+            <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Done</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C.fg }}>{completedCount}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal Cards */}
+      {filtered.map(g => {
+        const pct = getProgress(g);
+        return editId===g.id ? (
+          <div key={g.id} style={{ ...card, marginBottom:12 }}>
+            <input value={editTitle} onChange={e=>setEditTitle(e.target.value)} placeholder="Goal title"
+              style={{ ...inNum, marginBottom:8 }} />
+            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Current</div>
+                <input value={editCurrent} onChange={e=>setEditCurrent(e.target.value)} type="number" style={inNum} />
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Target</div>
+                <input value={editTarget} onChange={e=>setEditTarget(e.target.value)} type="number" style={inNum} />
+              </div>
+            </div>
+            <textarea value={editMemo} onChange={e=>setEditMemo(e.target.value)} placeholder="Notes..."
+              style={{ width:"100%", fontSize:14, padding:"9px 12px", border:"none", borderRadius:10, boxSizing:"border-box", resize:"none", height:56, outline:"none", fontFamily:"inherit", background:C.inputBg, marginBottom:10 }} />
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => setEditId(null)} style={{ flex:1, padding:"10px", background:C.muted, border:"none", borderRadius:10, cursor:"pointer", fontSize:13, color:C.fg }}>Cancel</button>
+              <button onClick={saveEdit} style={{ flex:1, padding:"10px", background:C.fg, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Save</button>
             </div>
           </div>
         ) : (
-          <div key={g.id} style={{ display:"flex", gap:10, marginBottom:10, padding:"13px 14px", background:"#f8f8f8", borderRadius:14 }}>
-            <button onClick={() => toggle(g.id)} style={{ width:22, height:22, borderRadius:"50%", border:`2.5px solid ${g.color}`, background:g.achieved?g.color:"transparent", cursor:"pointer", flexShrink:0, marginTop:2 }} />
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:15, fontWeight:600, textDecoration:g.achieved?"line-through":"none", color:g.achieved?"#bbb":"#111" }}>{g.title}</div>
-              {g.memo && <div style={{ fontSize:13, color:"#999", marginTop:2 }}>{g.memo}</div>}
+          <div key={g.id} style={{ ...card, marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:15, fontWeight:600, color:g.achieved?C.mutedFg:C.fg, textDecoration:g.achieved?"line-through":"none", marginBottom:2 }}>{g.title}</div>
+                {g.memo && <div style={{ fontSize:13, color:C.mutedFg }}>{g.memo}</div>}
+              </div>
+              {g.target > 0 && (
+                <div style={{ fontSize:13, color:C.mutedFg, marginLeft:12, flexShrink:0 }}>{g.current||0}/{g.target}</div>
+              )}
             </div>
-            {!g.achieved && <button onClick={() => startEdit(g)} style={{ background:"none", border:"none", cursor:"pointer", color:"#bbb", fontSize:14, padding:"2px 4px" }}>✎</button>}
-            <button onClick={() => del(g.id)} style={{ background:"none", border:"none", cursor:"pointer", color:"#ddd", fontSize:18, padding:"2px 4px" }}>×</button>
+
+            {/* Progress Bar */}
+            {g.target > 0 && (
+              <div style={{ marginBottom:10 }}>
+                <div style={{ height:6, background:C.muted, borderRadius:3, overflow:"hidden" }}>
+                  <div style={{ width:`${pct}%`, height:"100%", background:g.color||C.fg, borderRadius:3, transition:"width 0.4s" }} />
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", marginTop:6 }}>
+                  <span style={{ fontSize:12, color:C.mutedFg }}>{pct}% complete</span>
+                  <button onClick={() => startEdit(g)} style={{ fontSize:12, color:C.fg, background:"none", border:"none", cursor:"pointer", fontWeight:500 }}>Update →</button>
+                </div>
+              </div>
+            )}
+
+            {g.target === 0 || !g.target ? (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <button onClick={() => toggle(g.id)} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", padding:0 }}>
+                  <Check done={g.achieved} color={g.color} />
+                  <span style={{ fontSize:13, color:C.mutedFg }}>{g.achieved ? "Completed" : "Mark done"}</span>
+                </button>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => startEdit(g)} style={{ background:"none", border:"none", cursor:"pointer", color:C.mutedFg, fontSize:14 }}>✎</button>
+                  <button onClick={() => del(g.id)} style={{ background:"none", border:"none", cursor:"pointer", color:C.mutedFg, fontSize:16 }}>×</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:6 }}>
+                <button onClick={() => toggle(g.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:0 }}>
+                  <Check done={g.achieved} color={g.color} />
+                </button>
+                <button onClick={() => del(g.id)} style={{ background:"none", border:"none", cursor:"pointer", color:C.mutedFg, fontSize:16 }}>×</button>
+              </div>
+            )}
           </div>
-        )
-      ))}
-      {filtered.length===0 && <div style={{ textAlign:"center", color:"#ccc", padding:"32px 0", fontSize:14 }}>{period==="🏆" ? "No achievements yet 🏅" : "No goals for this period"}</div>}
-      {period!=="🏆" && (
+        );
+      })}
+
+      {filtered.length===0 && (
+        <div style={{ textAlign:"center", color:C.mutedFg, padding:"40px 0", fontSize:14 }}>
+          {showAchieved ? "No achievements yet 🏅" : "No goals yet"}
+        </div>
+      )}
+
+      {!showAchieved && (
         showAdd ? (
-          <div style={{ marginTop:8, padding:14, background:"#f8f8f8", borderRadius:14 }}>
-            <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="Goal title" style={{ width:"100%", fontSize:14, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", marginBottom:8, outline:"none" }} />
-            <textarea value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Notes (optional)" style={{ width:"100%", fontSize:13, padding:"9px 11px", border:"1px solid #e0e0e0", borderRadius:10, boxSizing:"border-box", resize:"none", height:60, marginBottom:10, outline:"none", fontFamily:"inherit" }} />
-            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+          <div style={{ ...card, marginTop:8 }}>
+            <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="Goal title"
+              style={{ ...inNum, marginBottom:8 }} />
+            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Current</div>
+                <input value={newCurrent} onChange={e=>setNewCurrent(e.target.value)} type="number" style={inNum} />
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:C.mutedFg, marginBottom:4 }}>Target (optional)</div>
+                <input value={newTarget} onChange={e=>setNewTarget(e.target.value)} type="number" placeholder="—" style={inNum} />
+              </div>
+            </div>
+            <textarea value={newMemo} onChange={e=>setNewMemo(e.target.value)} placeholder="Notes (optional)"
+              style={{ width:"100%", fontSize:14, padding:"9px 12px", border:"none", borderRadius:10, boxSizing:"border-box", resize:"none", height:56, marginBottom:12, outline:"none", fontFamily:"inherit", background:C.inputBg }} />
+            <div style={{ display:"flex", gap:8, marginBottom:14 }}>
               {GOAL_COLORS.map(c => <button key={c} onClick={() => setNewColor(c)} style={{ width:26, height:26, borderRadius:"50%", background:c, border:newColor===c?"3px solid #333":"2px solid transparent", cursor:"pointer" }} />)}
             </div>
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => setShowAdd(false)} style={{ flex:1, padding:"10px", background:"#e8e8e8", border:"none", borderRadius:10, cursor:"pointer", fontSize:13 }}>Cancel</button>
-              <button onClick={addGoal} style={{ flex:1, padding:"10px", background:"#000", color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:600 }}>Add Goal</button>
+              <button onClick={() => setShowAdd(false)} style={{ flex:1, padding:"11px", background:C.muted, border:"none", borderRadius:10, cursor:"pointer", fontSize:14, color:C.fg }}>Cancel</button>
+              <button onClick={addGoal} style={{ flex:1, padding:"11px", background:C.fg, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add Goal</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)} style={{ width:"100%", padding:"13px", background:"#000", color:"#fff", border:"none", borderRadius:14, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Goal</button>
+          <button onClick={() => setShowAdd(true)} style={{ width:"100%", padding:"14px", background:C.fg, color:"#fff", border:"none", borderRadius:14, fontSize:14, fontWeight:600, cursor:"pointer", marginTop:8 }}>+ Add Goal</button>
         )
       )}
     </div>
